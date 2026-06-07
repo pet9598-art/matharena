@@ -95,7 +95,7 @@
         .menu-btn:hover { background: #2563eb; transform: scale(1.05); }
         .menu-btn:disabled { background: #6b7280; border-color: #4b5563; cursor: not-allowed; transform: none; }
         
-        #modal { display: none; position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 20px 40px; border-radius: 10px; z-index: 600; text-align: center; font-size: 32px; border: 2px solid #fbbf24; pointer-events: none;}
+        #modal { display: none; position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 20px 40px; border-radius: 10px; z-index: 600; text-align: center; font-size: 32px; border: 2px solid #fbbf24; pointer-events: none; white-space: nowrap; box-shadow: 0 10px 20px rgba(0,0,0,0.5);}
         #announcement { display: none; position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); background: rgba(220,38,38,0.9); color: white; padding: 15px 40px; border-radius: 8px; z-index: 150; text-align: center; font-size: 30px; border: 4px solid #fca5a5; pointer-events: none; font-weight: bold; box-shadow: 0 10px 20px rgba(0,0,0,0.5); animation: dropIn 0.5s ease-out;}
         
         .lobby-box { background: rgba(0,0,0,0.5); padding: 30px; border-radius: 16px; text-align: center; }
@@ -143,8 +143,7 @@
         <div class="hero-cards" id="sp-hero-cards"></div>
         <div class="mb-4 text-white text-xl">
             <label for="player-nickname-sp" class="mr-2">내 이름:</label>
-            <!-- 기본값을 비워두어 사용자가 직접 타이핑하도록 유도 -->
-            <input type="text" id="player-nickname-sp" maxlength="4" placeholder="최대 4자" class="text-black text-center w-24 p-1 rounded font-bold mr-4" value="">
+            <input type="text" id="player-nickname-sp" maxlength="4" placeholder="최대 4자" class="text-black text-center w-24 p-1 rounded font-bold mr-4" value="용사">
             <label for="bot-count" class="mr-2">적(봇) 수:</label>
             <input type="number" id="bot-count" value="3" min="1" max="5" class="text-black text-center w-16 p-1 rounded font-bold">
         </div>
@@ -156,8 +155,7 @@
         <h1 class="text-5xl text-yellow-400 mb-8 drop-shadow-lg">멀티플레이 로비</h1>
         <div class="lobby-box">
             <p class="text-xl text-white mb-2">닉네임 (최대 4자)</p>
-            <!-- 기본값을 비워두어 사용자가 직접 타이핑하도록 유도 -->
-            <input type="text" id="player-nickname-mp" class="input-text" maxlength="4" placeholder="이름을 입력하세요" value="">
+            <input type="text" id="player-nickname-mp" class="input-text" maxlength="4" placeholder="이름을 입력하세요" value="용사">
             <div class="mt-8"><button class="menu-btn" onclick="createRoom()">새로운 방 만들기</button></div>
             <div class="mt-8 border-t border-gray-500 pt-6">
                 <input type="text" id="join-room-id" class="input-text" placeholder="방 번호 입력"><br>
@@ -288,6 +286,7 @@
         let currentRoomId = null;
         let isHost = false, isReady = false, myTeam = 'blue', isSinglePlayer = true;
         let roomListener = null;
+        let animationFrameId = null; // 루프 관리용 변수
 
         const MAP_WIDTH = 3200;
         const MAP_HEIGHT = 2400;
@@ -324,6 +323,17 @@
             { type: 'multiple', target: 7, text: "7의 배수를 찾아라!" }
         ];
 
+        // --- 누락되었던 showModal 함수 추가 ---
+        let modalTimeout = null;
+        function showModal(msg) {
+            const modal = document.getElementById('modal');
+            modal.innerText = msg;
+            modal.style.display = 'block';
+            if (modalTimeout) clearTimeout(modalTimeout);
+            modalTimeout = setTimeout(() => { modal.style.display = 'none'; }, 2500);
+        }
+        // ------------------------------------
+
         function showMenu(menuId) {
             document.querySelectorAll('.fullscreen-menu').forEach(el => el.classList.add('hidden-menu'));
             if(menuId) document.getElementById(menuId).classList.remove('hidden-menu');
@@ -345,8 +355,7 @@
         renderHeroCards('sp-hero-cards', false); renderHeroCards('mp-hero-cards', true);
 
         function createRoom() {
-            // 빈값이면 유저+랜덤숫자로 식별
-            const name = document.getElementById('player-nickname-mp').value.trim() || '유저' + Math.floor(Math.random()*1000);
+            const name = document.getElementById('player-nickname-mp').value || '유저';
             const roomId = Math.floor(1000 + Math.random() * 9000).toString(); 
             db.ref('rooms/' + roomId).set({ status: 'waiting', mode: 'domination', host: myUid }).then(() => {
                 isHost = true; joinRoom(roomId, name);
@@ -355,7 +364,7 @@
 
         function joinRoomBtn() {
             const roomId = document.getElementById('join-room-id').value;
-            const name = document.getElementById('player-nickname-mp').value.trim() || '유저' + Math.floor(Math.random()*1000);
+            const name = document.getElementById('player-nickname-mp').value || '유저';
             if(!roomId) return showModal("방 번호를 입력하세요!");
             db.ref('rooms/' + roomId).once('value', snapshot => {
                 if(snapshot.exists()) { isHost = (snapshot.val().host === myUid); joinRoom(roomId, name); } 
@@ -450,7 +459,7 @@
         function startSinglePlayer() {
             isSinglePlayer = true;
             let botCount = parseInt(document.getElementById('bot-count').value) || 3;
-            let myName = document.getElementById('player-nickname-sp').value.trim() || '용사';
+            let myName = document.getElementById('player-nickname-sp').value || '용사';
             let pData = { [myUid]: { team: 'blue', hero: selectedHeroType, name: myName } };
             const types = ['circle', 'square', 'triangle', 'hexagon'];
             for(let i=0; i<botCount; i++) pData['bot_'+i] = { team: 'red', hero: types[Math.floor(Math.random()*types.length)], isBot: true, name: '봇'+(i+1) };
@@ -487,7 +496,7 @@
             isGameActive = false; // 카운트다운 전까지 비활성화
 
             for (const [uid, pData] of Object.entries(playersData)) {
-                if (uid === myUid) { player = new Player(pData.team, false, pData.hero, pData.name || '용사'); myTeam = pData.team; } 
+                if (uid === myUid) { player = new Player(pData.team, false, pData.hero, pData.name || '유저'); myTeam = pData.team; } 
                 else { 
                     let newP = new Player(pData.team, pData.isBot || false, pData.hero, pData.name);
                     if (!isSinglePlayer && !pData.isBot) { newP.isRemote = true; remotePlayers[uid] = newP; }
@@ -502,10 +511,13 @@
 
             // 3, 2, 1 카운트다운 시작
             startCountdown(() => {
-                isGameActive = true; 
+                isGameActive = true; // 카운트다운 종료 후 조작 활성화
             });
 
-            currentState = GAME_STATE.PLAYING; lastTime = performance.now(); syncTimer = 0; requestAnimationFrame(gameLoop);
+            currentState = GAME_STATE.PLAYING; lastTime = performance.now(); syncTimer = 0; 
+            
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); // 루프 중복 실행 방지
+            animationFrameId = requestAnimationFrame(gameLoop);
         }
 
         function startCountdown(callback) {
@@ -996,10 +1008,9 @@
 
                 ctx.restore();
 
-                // 닉네임 첫 글자 렌더링
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Jua'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                let initial = this.name ? this.name.charAt(0) : '?';
-                ctx.fillText(initial, this.x, this.y);
+                // 닉네임 렌더링 (최대 4글자)
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Jua'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(this.name, this.x, this.y);
 
                 ctx.fillStyle = '#1f2937'; ctx.fillRect(this.x - 25, this.y - 40, 50, 8);
                 ctx.fillStyle = '#48bb78'; ctx.fillRect(this.x - 25, this.y - 40, 50 * (this.hp / this.maxHp), 8);
@@ -1033,7 +1044,11 @@
             respawnZones = [ new RespawnZone(50, 800, 250, 800, 'blue'), new RespawnZone(MAP_WIDTH - 300, 800, 250, 800, 'red') ];
         }
 
+        let isControlsSetup = false;
         function setupControls() {
+            if (isControlsSetup) return; // 컨트롤이 이미 셋업되었다면 무시
+            isControlsSetup = true;
+
             window.addEventListener('keydown', (e) => { 
                 keys[e.code] = true; 
                 if(e.code === 'KeyR') activateUlt();
@@ -1162,6 +1177,32 @@
             closeQuiz();
         }
 
+        function startNewMission() {
+            let idx = Math.floor(Math.random() * missions.length);
+            let currentMissionTemp = missions[idx]; let correctAnswers = [];
+            if (currentMissionTemp.type === 'divisor') { for(let i=1; i<=currentMissionTemp.target; i++) { if(currentMissionTemp.target % i === 0) correctAnswers.push(i); } } 
+            else { for(let i=1; i<=6; i++) correctAnswers.push(currentMissionTemp.target * i); }
+
+            let newOrbs = [];
+            for (let i = 0; i < 20; i++) { 
+                let x, y, valid = false, attempts = 0;
+                while (!valid && attempts < 50) {
+                    x = Math.random() * (MAP_WIDTH - 200) + 100; y = Math.random() * (MAP_HEIGHT - 200) + 100; valid = true;
+                    for (let c of containers) { if (x > c.x - 20 && x < c.x + c.w + 20 && y > c.y - 20 && y < c.y + c.h + 20) { valid = false; break; } }
+                    attempts++;
+                }
+                if (valid) newOrbs.push({ x: x, y: y, number: (i < 6) ? correctAnswers[Math.floor(Math.random() * correctAnswers.length)] : Math.floor(Math.random() * 30) + 1, id: 'orb_' + i + '_' + Date.now() }); 
+            }
+
+            if (isSinglePlayer) {
+                currentMission = missions[idx]; missionBanner.innerText = currentMission.text;
+                missionBanner.classList.add('mission-pop'); setTimeout(() => missionBanner.classList.remove('mission-pop'), 300);
+                orbs = newOrbs.map(o => new ResourceOrb(o.x, o.y, o.number, o.id));
+            } else if (isHost) {
+                db.ref(`rooms/${currentRoomId}/events/mission`).set({ index: idx, orbs: newOrbs });
+            }
+        }
+
         function checkGameEnd() {
             if(selectedGameMode === 'deathmatch') {
                 if(stats.blue.kills >= 100) endGame("블루팀 승리! (100킬 달성)");
@@ -1172,7 +1213,33 @@
         function endGame(msg) {
             currentState = GAME_STATE.GAME_OVER; const modal = document.getElementById('modal');
             modal.innerText = msg; modal.style.display = 'block';
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); // 루프 종료
             setTimeout(() => { modal.style.display = 'none'; document.getElementById('game-container').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; }, 5000);
+        }
+
+        function handleDeath(deadPlayer, killer) {
+            if (isSinglePlayer) {
+                displayKillLog(killer ? killer.name : '시스템', killer ? killer.team : '', deadPlayer.name, deadPlayer.team);
+                if (deadPlayer.team === 'blue') { stats.blue.deaths++; stats.red.kills++; if(deadPlayer===player) { showModal("사망! 3초 후 리스폰됩니다."); closeQuiz(); } } 
+                else { stats.red.deaths++; stats.blue.kills++; if(killer===player) showModal("적을 처치했습니다!"); }
+                
+                document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
+                document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
+                
+                if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
+                deadPlayer.hp = 0; deadPlayer.x = -1000; deadPlayer.targetX = -1000; deadPlayer.isDeadProcessed = true;
+                setTimeout(() => { deadPlayer.spawn(); updateUI(); }, 3000); updateUI();
+                checkGameEnd();
+            } else {
+                if (deadPlayer === player || (isHost && deadPlayer.isBot)) {
+                    db.ref(`rooms/${currentRoomId}/events/killLogs`).push({
+                        killerName: killer ? killer.name : '알 수 없음', killerTeam: killer ? killer.team : '',
+                        victimName: deadPlayer.name, victimTeam: deadPlayer.team,
+                        victimUid: deadPlayer === player ? myUid : deadPlayer.name
+                    });
+                }
+                deadPlayer.hp = 0; deadPlayer.isDeadProcessed = true; 
+            }
         }
 
         function checkCollisions() {
@@ -1230,15 +1297,6 @@
 
                 const flashEl = document.getElementById('flash-cd-text');
                 if(player.flashCooldown > 0) flashEl.innerText = Math.ceil(player.flashCooldown/1000) + 's'; else flashEl.innerText = '';
-            }
-        }
-
-        function showModal(msg) {
-            const m = document.getElementById('modal');
-            if(m) {
-                m.innerText = msg;
-                m.style.display = 'block';
-                setTimeout(() => { m.style.display = 'none'; }, 2000);
             }
         }
 
@@ -1332,7 +1390,8 @@
             projectiles.forEach(p => p.draw(ctx)); 
             explosives.forEach(e => { if(e.type !== 'mine') e.draw(ctx); }); 
 
-            ctx.restore(); requestAnimationFrame(gameLoop);
+            ctx.restore(); 
+            animationFrameId = requestAnimationFrame(gameLoop);
         }
     </script>
 </body>
