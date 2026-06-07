@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Math Arena 3v3 - 실시간 이동 동기화</title>
+    <title>Math Arena 3v3 - 이벤트 동기화 및 킬로그</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- NippleJS -->
@@ -28,6 +28,11 @@
         .score-blue { color: #60a5fa; }
         .score-red { color: #f87171; }
         .score-numbers { font-size: 24px; font-weight: bold; }
+
+        /* 킬로그 (새로 추가됨) */
+        #kill-log-container { position: absolute; top: 80px; right: 20px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; z-index: 100; align-items: flex-end; }
+        .kill-log-item { background: rgba(0,0,0,0.75); color: white; padding: 6px 16px; border-radius: 8px; font-size: 16px; border: 1px solid rgba(255,255,255,0.3); animation: fadeOut 4.5s forwards; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+        @keyframes fadeOut { 0% { opacity: 1; transform: translateX(20px); } 10% { transform: translateX(0); } 80% { opacity: 1; } 100% { opacity: 0; display: none; } }
 
         /* 점령전 UI */
         #domination-ui { background: rgba(0, 0, 0, 0.8); padding: 10px 20px; border-radius: 12px; border: 2px solid #fbbf24; color: white; display: none; flex-direction: column; align-items: center; pointer-events: auto;}
@@ -90,7 +95,6 @@
         #modal { display: none; position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 20px 40px; border-radius: 10px; z-index: 600; text-align: center; font-size: 32px; border: 2px solid #fbbf24; pointer-events: none;}
         #announcement { display: none; position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); background: rgba(220,38,38,0.9); color: white; padding: 15px 40px; border-radius: 8px; z-index: 150; text-align: center; font-size: 30px; border: 4px solid #fca5a5; pointer-events: none; font-weight: bold; box-shadow: 0 10px 20px rgba(0,0,0,0.5); animation: dropIn 0.5s ease-out;}
         
-        /* 멀티플레이 로비 UI */
         .lobby-box { background: rgba(0,0,0,0.5); padding: 30px; border-radius: 16px; text-align: center; }
         .input-text { padding: 10px; font-size: 20px; border-radius: 8px; border: none; text-align: center; font-family: 'Jua'; width: 250px; margin-bottom: 10px; }
         
@@ -104,7 +108,6 @@
 </head>
 <body>
 
-    <!-- 1. Start Screen (Main Lobby) -->
     <div id="start-screen" class="fullscreen-menu">
         <h1 class="text-7xl text-yellow-400 mb-4 drop-shadow-2xl font-bold">MATH ARENA</h1>
         <p class="text-2xl text-gray-300 mb-12">수학과 생존의 결투</p>
@@ -112,47 +115,32 @@
         <button class="menu-btn !bg-purple-600 !border-purple-800 hover:!bg-purple-700" onclick="showMenu('multiplayer-lobby')">멀티플레이 (PvP)</button>
     </div>
 
-    <!-- 2. Single Player Menu -->
     <div id="single-player-menu" class="fullscreen-menu hidden-menu">
         <button class="absolute top-5 left-5 bg-gray-700 text-white px-4 py-2 rounded-lg font-bold hover:bg-gray-600 transition" onclick="showMenu('start-screen')">⬅ 뒤로가기</button>
-        
         <h1 class="text-5xl text-yellow-400 mb-2 drop-shadow-lg mt-8">싱글플레이 설정</h1>
-        
         <div class="mode-selection mt-4">
             <label class="mode-option"><input type="radio" name="spGameMode" value="domination" checked> 점령전 (5분)</label>
-            <label class="mode-option"><input type="radio" name="spGameMode" value="deathmatch"> 100킬전 (먼저 100킬)</label>
+            <label class="mode-option"><input type="radio" name="spGameMode" value="deathmatch"> 100킬전</label>
         </div>
-        
         <div class="hero-cards" id="sp-hero-cards"></div>
-
-        <div class="mb-4 text-white text-xl">
-            <label for="bot-count" class="mr-4">적(레드팀 봇) 수:</label>
-            <input type="number" id="bot-count" value="3" min="1" max="5" class="text-black text-center w-20 p-1 rounded font-bold">
-        </div>
-
+        <div class="mb-4 text-white text-xl"><label for="bot-count" class="mr-4">적(봇) 수:</label><input type="number" id="bot-count" value="3" min="1" max="5" class="text-black text-center w-20 p-1 rounded font-bold"></div>
         <button class="menu-btn" onclick="startSinglePlayer()">레디 (게임 시작)</button>
     </div>
 
-    <!-- 3. Multiplayer Lobby -->
     <div id="multiplayer-lobby" class="fullscreen-menu hidden-menu">
         <button class="absolute top-5 left-5 bg-gray-700 text-white px-4 py-2 rounded-lg font-bold" onclick="showMenu('start-screen')">⬅ 메인으로</button>
         <h1 class="text-5xl text-yellow-400 mb-8 drop-shadow-lg">멀티플레이 로비</h1>
-        
         <div class="lobby-box">
             <p class="text-xl text-white mb-2">닉네임</p>
             <input type="text" id="player-nickname" class="input-text" placeholder="이름을 입력하세요" value="용사">
-            <div class="mt-8">
-                <button class="menu-btn" onclick="createRoom()">새로운 방 만들기</button>
-            </div>
+            <div class="mt-8"><button class="menu-btn" onclick="createRoom()">새로운 방 만들기</button></div>
             <div class="mt-8 border-t border-gray-500 pt-6">
-                <input type="text" id="join-room-id" class="input-text" placeholder="방 번호 입력">
-                <br>
+                <input type="text" id="join-room-id" class="input-text" placeholder="방 번호 입력"><br>
                 <button class="menu-btn !bg-green-600 !border-green-800" onclick="joinRoomBtn()">방 참가하기</button>
             </div>
         </div>
     </div>
 
-    <!-- 4. Multiplayer Room (Waiting Room) -->
     <div id="multiplayer-room" class="fullscreen-menu hidden-menu">
         <button class="absolute top-5 left-5 bg-red-600 text-white px-4 py-2 rounded-lg font-bold" onclick="leaveRoom()">나가기</button>
         <h2 class="text-4xl text-white mb-4">방 번호: <span id="display-room-id" class="text-yellow-400 font-bold">0000</span></h2>
@@ -176,7 +164,6 @@
         </div>
 
         <div class="hero-cards" id="mp-hero-cards" style="margin: 10px 0; transform: scale(0.8);"></div>
-
         <div class="flex gap-4">
             <button class="menu-btn !bg-gray-600" id="btn-mp-ready" onclick="toggleReady()">준비하기</button>
             <button class="menu-btn" id="btn-mp-start" onclick="startMultiplayer()" disabled>게임 시작</button>
@@ -187,6 +174,7 @@
     <!-- UI Overlays -->
     <div id="modal">메시지</div>
     <div id="announcement">📦 보급이 곧 투하됩니다!</div>
+    <div id="kill-log-container"></div> <!-- 킬로그 컨테이너 추가 -->
 
     <div id="quiz-modal-container">
         <div id="quiz-box">
@@ -263,16 +251,9 @@
         const missionBanner = document.getElementById('mission-banner');
 
         let viewWidth, viewHeight;
-        function resize() { 
-            viewWidth = window.innerWidth; 
-            viewHeight = window.innerHeight; 
-            canvas.width = viewWidth; 
-            canvas.height = viewHeight; 
-        }
-        window.addEventListener('resize', resize); 
-        resize();
+        function resize() { viewWidth = window.innerWidth; viewHeight = window.innerHeight; canvas.width = viewWidth; canvas.height = viewHeight; }
+        window.addEventListener('resize', resize); resize();
 
-        // 글로벌 상태 변수
         const GAME_STATE = { MENU: 0, PLAYING: 1, GAME_OVER: 2 };
         let currentState = GAME_STATE.MENU;
         
@@ -288,12 +269,11 @@
         let stats = { blue: { kills: 0, deaths: 0 }, red: { kills: 0, deaths: 0 } };
         let gameTimeRemaining = 300; 
         let domScores = { blue: 0, red: 0 };
-        let dominationPoint = { x: 1600, y: 1200, radius: 250, capturingTeam: null, captureProgress: 0, owner: null };
 
         let player;
-        let others = []; // 싱글플레이시 봇들, 멀티플레이시 다른 유저들 (Lerp 보간용)
-        let remotePlayers = {}; // UID를 키값으로 빠른 탐색
-        let syncTimer = 0; // 파이어베이스 좌표 틱(Tick) 타이머
+        let others = []; 
+        let remotePlayers = {}; 
+        let syncTimer = 0; 
 
         let projectiles = [], meleeSlashes = [], orbs = [], containers = [];
         let respawnZones = [], supplyCrates = [], explosives = [], heartPacks = [], activeRealms = [];
@@ -367,18 +347,13 @@
                 const data = snapshot.val();
                 if(!data) { leaveRoom(); return showModal("방이 사라졌습니다."); }
                 
-                // 게임 시작 감지
-                if(data.status === 'playing' && currentState === GAME_STATE.MENU) {
-                    enterIngame(data.mode, data.players);
-                }
+                if(data.status === 'playing' && currentState === GAME_STATE.MENU) enterIngame(data.mode, data.players);
                 
-                // 인게임 플레이 중 원격 플레이어 좌표(Lerp) 동기화 반영
                 if(currentState === GAME_STATE.PLAYING && data.players) {
                     for(let uid in data.players) {
-                        if(uid === myUid) continue; // 내 정보는 클라이언트가 직접 연산
-                        let pData = data.players[uid];
-                        let p = remotePlayers[uid];
-                        if(p) {
+                        if(uid === myUid) continue; 
+                        let pData = data.players[uid]; let p = remotePlayers[uid];
+                        if(p && !p.isDeadProcessed) { // 사망 처리 중에는 보간 무시
                             if (pData.x !== undefined) p.targetX = pData.x;
                             if (pData.y !== undefined) p.targetY = pData.y;
                             if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
@@ -387,7 +362,6 @@
                     }
                 }
 
-                // 대기실 업데이트
                 if(currentState === GAME_STATE.MENU) {
                     if(data.mode) document.querySelector(`input[name="mpGameMode"][value="${data.mode}"]`).checked = true;
                     updateRoomUI(data.players || {});
@@ -434,15 +408,16 @@
         function updateRoomMode() { if(isHost && currentRoomId) db.ref('rooms/' + currentRoomId).update({ mode: document.querySelector('input[name="mpGameMode"]:checked').value }); }
         
         function leaveRoom() {
-            if(currentRoomId) {
-                db.ref(`rooms/${currentRoomId}/players/${myUid}`).remove();
-                if(roomListener) db.ref('rooms/' + currentRoomId).off('value', roomListener);
-                currentRoomId = null; isHost = false;
-            }
+            if(currentRoomId) { db.ref(`rooms/${currentRoomId}/players/${myUid}`).remove(); if(roomListener) db.ref('rooms/' + currentRoomId).off('value', roomListener); currentRoomId = null; isHost = false; }
             showMenu('multiplayer-lobby');
         }
 
-        function startMultiplayer() { if(isHost && currentRoomId) db.ref('rooms/' + currentRoomId).update({ status: 'playing' }); }
+        function startMultiplayer() { 
+            if(isHost && currentRoomId) {
+                db.ref(`rooms/${currentRoomId}/events`).remove(); // 시작 전 이벤트 초기화
+                db.ref('rooms/' + currentRoomId).update({ status: 'playing' }); 
+            }
+        }
 
         function startSinglePlayer() {
             isSinglePlayer = true;
@@ -454,34 +429,98 @@
         }
 
         function enterIngame(mode, playersData) {
-            selectedGameMode = mode;
-            showMenu(null); document.getElementById('game-container').style.display = 'block';
+            selectedGameMode = mode; showMenu(null); document.getElementById('game-container').style.display = 'block';
 
             if(selectedGameMode === 'domination') { document.getElementById('domination-ui').style.display = 'flex'; gameTimeRemaining = 300; domScores = {blue:0, red:0}; } 
             else { document.getElementById('domination-ui').style.display = 'none'; }
 
             initMap(); projectiles = []; meleeSlashes = []; orbs = []; supplyCrates = []; explosives = []; heartPacks = []; activeRealms = [];
-            stats = { blue: { kills: 0, deaths: 0 }, red: { kills: 0, deaths: 0 } }; 
-            
-            others = []; 
-            remotePlayers = {}; // 리셋
+            stats = { blue: { kills: 0, deaths: 0 }, red: { kills: 0, deaths: 0 } }; others = []; remotePlayers = {}; 
 
             for (const [uid, pData] of Object.entries(playersData)) {
-                if (uid === myUid) { 
-                    player = new Player(pData.team, false, pData.hero, pData.name || '나'); 
-                    myTeam = pData.team; 
-                } else { 
+                if (uid === myUid) { player = new Player(pData.team, false, pData.hero, pData.name || '나'); myTeam = pData.team; } 
+                else { 
                     let newP = new Player(pData.team, pData.isBot || false, pData.hero, pData.name);
-                    if (!isSinglePlayer && !pData.isBot) {
-                        newP.isRemote = true; // 원격 유저 플래그 설정
-                        remotePlayers[uid] = newP;
-                    }
+                    if (!isSinglePlayer && !pData.isBot) { newP.isRemote = true; remotePlayers[uid] = newP; }
                     others.push(newP); 
                 }
             }
             
-            updateUI(); setupControls(); startNewMission();
+            updateUI(); setupControls(); 
+            
+            if (isSinglePlayer) startNewMission();
+            else { setupMultiplayerListeners(); if (isHost) triggerNewMissionSync(); }
+
             currentState = GAME_STATE.PLAYING; lastTime = performance.now(); syncTimer = 0; requestAnimationFrame(gameLoop);
+        }
+
+        // --- Firebase 이벤트 리스너 세팅 (동기화 핵심) ---
+        function setupMultiplayerListeners() {
+            const eventsRef = db.ref(`rooms/${currentRoomId}/events`);
+            
+            // 1. 킬로그 및 스코어 동기화
+            eventsRef.child('killLogs').on('child_added', snap => {
+                const data = snap.val();
+                displayKillLog(data.killerName, data.killerTeam, data.victimName, data.victimTeam);
+                
+                if (data.victimTeam === 'blue') { stats.blue.deaths++; stats.red.kills++; } 
+                else { stats.red.deaths++; stats.blue.kills++; }
+                
+                document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
+                document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
+
+                if (data.victimUid === myUid) {
+                    showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
+                    player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
+                    if(player.realm) { player.realm.active = false; player.realm = null; }
+                    setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
+                } else {
+                    let deadP = remotePlayers[data.victimUid] || others.find(b => b.name === data.victimName);
+                    if (deadP) {
+                        deadP.hp = 0; deadP.x = -1000; deadP.targetX = -1000; deadP.isDeadProcessed = true;
+                        if(deadP.realm) { deadP.realm.active = false; deadP.realm = null; }
+                        if (isHost && deadP.isBot) setTimeout(() => { deadP.spawn(); }, 3000);
+                    }
+                }
+                
+                if(data.killerName === player.name && data.victimTeam !== player.team) showModal("적을 처치했습니다!");
+                checkGameEnd();
+            });
+
+            // 2. 공격(기본 모션) 동기화
+            eventsRef.child('attacks').on('child_added', snap => {
+                const data = snap.val(); if(data.uid === myUid) return;
+                const p = remotePlayers[data.uid];
+                if(p && !p.isDeadProcessed) p.fireProjectile(data.twX, data.twY);
+            });
+
+            // 3. 보급품 투하 동기화
+            eventsRef.child('supplyCrates').on('child_added', snap => {
+                const data = snap.val(); supplyCrates.push(new SupplyCrate(data.x, data.y, data.id));
+                showAnnouncement("📦 보급이 투하되었습니다!");
+            });
+
+            // 4. 미션 & 오브젝트(구슬) 동기화
+            eventsRef.child('mission').on('value', snap => {
+                const data = snap.val(); if(!data) return;
+                currentMission = missions[data.index];
+                missionBanner.innerText = currentMission.text;
+                missionBanner.classList.add('mission-pop'); setTimeout(() => missionBanner.classList.remove('mission-pop'), 300);
+                orbs = data.orbs ? data.orbs.map(o => new ResourceOrb(o.x, o.y, o.number, o.id)) : [];
+            });
+            eventsRef.child('orbEaten').on('child_added', snap => {
+                const eatenId = snap.val(); orbs = orbs.filter(o => o.id !== eatenId);
+            });
+        }
+
+        function displayKillLog(kName, kTeam, vName, vTeam) {
+            const container = document.getElementById('kill-log-container');
+            const el = document.createElement('div'); el.className = 'kill-log-item';
+            const kColor = kTeam === 'blue' ? '#60a5fa' : '#f87171';
+            const vColor = vTeam === 'blue' ? '#60a5fa' : '#f87171';
+            el.innerHTML = `<span style="color:${kColor}; font-weight:bold;">${kName}</span> ⚔️ <span style="color:${vColor}; font-weight:bold;">${vName}</span>`;
+            container.appendChild(el);
+            setTimeout(() => { if(container.contains(el)) container.removeChild(el); }, 4500);
         }
 
         class DominationPoint {
@@ -489,16 +528,11 @@
             update(dt) {
                 if(selectedGameMode !== 'domination') return;
                 let bCount = 0, rCount = 0;
-                let targets = [player, ...others];
-                for(let t of targets) {
-                    if(t && t.hp > 0 && Math.hypot(t.x - this.x, t.y - this.y) < this.radius) {
-                        if(t.team === 'blue') bCount++; else rCount++;
-                    }
+                for(let t of [player, ...others]) {
+                    if(t && t.hp > 0 && Math.hypot(t.x - this.x, t.y - this.y) < this.radius) { if(t.team === 'blue') bCount++; else rCount++; }
                 }
-                
                 let dominant = null;
-                if(bCount > 0 && rCount === 0) dominant = 'blue';
-                else if(rCount > 0 && bCount === 0) dominant = 'red';
+                if(bCount > 0 && rCount === 0) dominant = 'blue'; else if(rCount > 0 && bCount === 0) dominant = 'red';
 
                 if(dominant) {
                     if(this.capturingTeam !== dominant) { this.capturingTeam = dominant; this.captureProgress = 0; }
@@ -506,9 +540,7 @@
                         this.captureProgress += dt / 1000;
                         if(this.captureProgress >= this.maxProgress) { this.owner = dominant; this.captureProgress = 0; showAnnouncement(dominant === 'blue' ? "블루팀 거점 점령!" : "레드팀 거점 점령!"); }
                     }
-                } else {
-                    this.capturingTeam = null; this.captureProgress = Math.max(0, this.captureProgress - dt/1000);
-                }
+                } else { this.capturingTeam = null; this.captureProgress = Math.max(0, this.captureProgress - dt/1000); }
 
                 if(this.owner) domScores[this.owner] += dt / 1000;
             }
@@ -525,9 +557,7 @@
                     ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, -Math.PI/2, -Math.PI/2 + (this.captureProgress/this.maxProgress)*Math.PI*2);
                     ctx.strokeStyle = this.capturingTeam === 'blue' ? '#60a5fa' : '#f87171'; ctx.lineWidth = 12; ctx.stroke();
                 }
-                
-                ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '30px Jua'; ctx.textAlign = 'center';
-                ctx.fillText(this.owner ? (this.owner==='blue'?"블루팀 점령중":"레드팀 점령중") : "거점 (비어있음)", this.x, this.y);
+                ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '30px Jua'; ctx.textAlign = 'center'; ctx.fillText(this.owner ? (this.owner==='blue'?"블루팀 점령중":"레드팀 점령중") : "거점 (비어있음)", this.x, this.y);
             }
         }
         let domPoint = new DominationPoint();
@@ -560,7 +590,7 @@
         }
 
         class ResourceOrb {
-            constructor(x, y, number) { this.x = x; this.y = y; this.radius = 16; this.number = number; this.spawnTime = Date.now(); }
+            constructor(x, y, number, id) { this.x = x; this.y = y; this.radius = 16; this.number = number; this.id = id || ('orb_'+Math.random()); this.spawnTime = Date.now(); }
             draw(ctx) {
                 const yOff = Math.sin((Date.now() - this.spawnTime) / 200) * 4;
                 ctx.beginPath(); ctx.arc(this.x, this.y + yOff, this.radius, 0, Math.PI * 2); ctx.fillStyle = '#fbbf24'; ctx.fill(); ctx.strokeStyle = '#b45309'; ctx.lineWidth = 3; ctx.stroke();
@@ -578,7 +608,7 @@
         }
 
         class SupplyCrate {
-            constructor(x, y) { this.x = x; this.y = y; this.radius = 40; this.active = true; this.failedTeams = []; this.dropZ = 1200; this.generateQuiz(); }
+            constructor(x, y, id) { this.x = x; this.y = y; this.radius = 40; this.id = id || ('crate_'+Date.now()); this.active = true; this.failedTeams = []; this.dropZ = 1200; this.generateQuiz(); }
             update(dt) { if (this.dropZ > 0) this.dropZ = Math.max(0, this.dropZ - dt * 1.8); }
             generateQuiz() {
                 let a = Math.floor(Math.random()*15)+10; let b = Math.floor(Math.random()*15)+10; let c = Math.floor(Math.random()*5)+2; let ans = (a+b)*c;
@@ -639,7 +669,7 @@
                     if (this.timer <= 0) { this.active = false; explosives.push(new Explosive('explosion', this.x, this.y, this.owner)); }
                 } else if (this.type === 'mine') {
                     for(let t of [player, ...others]) {
-                        if (t && t.hp > 0 && t.team !== this.owner.team && t.realm === this.owner.realm) {
+                        if (t && t.hp > 0 && !t.isDeadProcessed && t.team !== this.owner.team && t.realm === this.owner.realm) {
                             if(Math.hypot(this.x - t.x, this.y - t.y) < t.radius + 15) { this.active = false; explosives.push(new Explosive('explosion', this.x, this.y, this.owner)); break; }
                         }
                     }
@@ -650,7 +680,8 @@
                             if (t && t.hp > 0 && t.invincibleTimer <= 0 && t.team !== this.owner.team && !this.damagedTargets.includes(t) && t.realm === this.owner.realm) {
                                 if(Math.hypot(this.x - t.x, this.y - t.y) < this.radius + t.radius) {
                                     let dmg = 40; if(t.heroType === 'hexagon' && t.ultActiveTimer > 0) dmg *= 0.8;
-                                    t.hp -= dmg; this.damagedTargets.push(t); if(t.hp <= 0) handleDeath(t);
+                                    t.hp -= dmg; this.damagedTargets.push(t); 
+                                    if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this.owner); }
                                 }
                             }
                         }
@@ -674,7 +705,7 @@
                 this.timer -= dt; if(this.timer <= 0) { this.active = false; return; }
                 this.x = this.owner.x; this.y = this.owner.y;
                 for (let t of [player, ...others]) {
-                    if (t && t.hp > 0 && t.team !== this.owner.team && !this.damaged.includes(t) && this.owner.realm === t.realm) {
+                    if (t && t.hp > 0 && !t.isDeadProcessed && t.team !== this.owner.team && !this.damaged.includes(t) && this.owner.realm === t.realm) {
                         let dist = Math.hypot(t.x - this.x, t.y - this.y);
                         if (dist < this.radius + t.radius) {
                             let angleToT = Math.atan2(t.y - this.y, t.x - this.x);
@@ -691,7 +722,7 @@
                                 }
 
                                 if (!this.owner.isBot && !this.owner.isRemote) { this.owner.ultGauge = Math.min(100, this.owner.ultGauge + 5); updateUI(); }
-                                if(t.hp <= 0) handleDeath(t);
+                                if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this.owner); }
                             }
                         }
                     }
@@ -713,8 +744,7 @@
                 this.vx = Math.cos(angle) * this.speed; this.vy = Math.sin(angle) * this.speed;
                 this.color = color; this.owner = owner; 
                 this.damage = (owner.heroType === 'triangle') ? 10 : 15; 
-                this.active = true;
-                this.distanceTraveled = 0;
+                this.active = true; this.distanceTraveled = 0;
             }
             update() {
                 let moveDist = Math.hypot(this.vx, this.vy);
@@ -745,27 +775,23 @@
                 
                 this.inventory = { mine: 0, grenade: 0 };
                 this.facingAngle = 0; this.realm = null; this.ultGauge = 0; this.flashCooldown = 0;
-                
-                this.isRemote = false; // 멀티플레이 보간 식별용
-                
+                this.isRemote = false; 
                 this.spawn();
             }
             spawn() {
                 this.hp = this.maxHp; this.speed = this.baseSpeed; this.vx = 0; this.vy = 0; 
                 this.slowTimer = 0; this.lastAttackTime = 0; this.attackCooldown = this.baseCooldown; this.invincibleTimer = 3000;
                 this.ultActiveTimer = 0; this.lastUltFireTime = 0; this.buffStacks = 0; this.realm = null;
+                this.isDeadProcessed = false; 
                 
                 if (this.team === 'blue') { this.x = Math.random() * 200 + 150; this.y = Math.random() * 800 + (MAP_HEIGHT/2 - 400); } 
                 else { this.x = MAP_WIDTH - (Math.random() * 200 + 150); this.y = Math.random() * 800 + (MAP_HEIGHT/2 - 400); }
-                
                 this.targetX = this.x; this.targetY = this.y;
             }
             update(dt) {
-                // 멀티플레이 다른 유저 Lerp 보간 이동 처리
-                if (this.isRemote) {
+                if (this.isRemote && !this.isDeadProcessed) {
                     if (this.targetX !== undefined) this.x += (this.targetX - this.x) * 0.2;
                     if (this.targetY !== undefined) this.y += (this.targetY - this.y) * 0.2;
-                    // 원격 캐릭터는 자체 물리엔진이나 AI를 돌리지 않고 위치 보간만 수행함
                     return; 
                 }
 
@@ -776,12 +802,10 @@
                 if (this.realm && this.heroType === 'triangle' && this.realm.ninja === this) {
                     this.hp = Math.min(this.maxHp, this.hp + 15 * (dt/1000)); speedMult = 1.3; coolMult = 0.5;
                 }
-                
                 if (this.heroType === 'square' && this.ultActiveTimer > 0) coolMult = 0.5;
 
                 let currentBaseSpeed = (this.baseSpeed + (this.buffStacks * 0.08)) * speedMult;
                 this.attackCooldown = Math.max(100, (this.baseCooldown - (this.buffStacks * 10))) * coolMult;
-
                 if (this.slowTimer > 0) { this.slowTimer -= dt; this.speed = currentBaseSpeed * 0.5; } else { this.speed = currentBaseSpeed; }
 
                 if (!this.isBot && this.hp > 0 && this.ultGauge < 100) {
@@ -796,8 +820,7 @@
                     if (this.heroType === 'circle') {
                         const now = Date.now();
                         if (now - this.lastUltFireTime > 50) {
-                            this.lastUltFireTime = now;
-                            let target = null; let minDist = Infinity;
+                            this.lastUltFireTime = now; let target = null; let minDist = Infinity;
                             for (let t of [player, ...others]) {
                                 if (t && t.hp > 0 && t.team !== this.team && t.realm === this.realm) { let d = Math.hypot(t.x - this.x, t.y - this.y); if (d < minDist) { minDist = d; target = t; } }
                             }
@@ -813,14 +836,14 @@
                         for (let t of [player, ...others]) {
                             if (t && t.realm === this.realm && Math.hypot(t.x - this.x, t.y - this.y) <= 150) {
                                 if (t.team === this.team) t.hp = Math.min(t.maxHp, t.hp + 15 * (dt/1000));
-                                else { t.hp -= 15 * (dt/1000); if(t.hp <= 0) handleDeath(t); }
+                                else { t.hp -= 15 * (dt/1000); if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this); } }
                             }
                         }
                     }
                     if (this.ultActiveTimer <= 0 && this === player) updateUI();
                 }
 
-                if (this.isBot && this.hp > 0) {
+                if (this.isBot && this.hp > 0 && !this.isDeadProcessed) {
                     let target = player; 
                     if (this.realm) target = (this.realm.ninja === this) ? this.realm.target : this.realm.ninja;
 
@@ -861,7 +884,6 @@
                         }
                     });
                 }
-
                 this.x = nextX; this.y = nextY;
             }
 
@@ -905,15 +927,11 @@
 
                 ctx.restore();
 
-                // 닉네임 첫 글자 렌더링 (도형 위에 수평으로 고정되게 그림)
-                ctx.fillStyle = '#fff';
-                ctx.font = 'bold 20px Jua';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
+                // 닉네임 첫 글자 렌더링
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Jua'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                 let initial = this.name ? this.name.charAt(0) : '?';
                 ctx.fillText(initial, this.x, this.y);
 
-                // 체력바
                 ctx.fillStyle = '#1f2937'; ctx.fillRect(this.x - 25, this.y - 40, 50, 8);
                 ctx.fillStyle = '#48bb78'; ctx.fillRect(this.x - 25, this.y - 40, 50 * (this.hp / this.maxHp), 8);
             }
@@ -935,10 +953,7 @@
 
         function initMap() {
             containers = []; const colors = ['#b91c1c', '#0369a1', '#15803d', '#ea580c']; 
-            
-            if (selectedGameMode === 'deathmatch') {
-                containers.push(new Container(1400, 1000, 400, 400, colors[1]));
-            }
+            if (selectedGameMode === 'deathmatch') containers.push(new Container(1400, 1000, 400, 400, colors[1]));
 
             containers.push(new Container(1400, 200, 400, 150, colors[0])); containers.push(new Container(1400, 2050, 400, 150, colors[1]));
             containers.push(new Container(1000, 1300, 150, 200, colors[3])); containers.push(new Container(2050, 900, 150, 200, colors[2]));
@@ -960,7 +975,7 @@
             canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); if (aimingItem) cancelAim(); });
 
             canvas.addEventListener('pointerdown', (e) => {
-                if (player.hp <= 0) return;
+                if (player.hp <= 0 || player.isDeadProcessed) return;
                 let twX = e.clientX + camera.x; let twY = e.clientY + camera.y;
 
                 if (aimingItem) {
@@ -1002,12 +1017,13 @@
 
                 if(document.getElementById('quiz-modal-container').style.display !== 'flex' && (player.ultActiveTimer <= 0 || player.heroType === 'square')) {
                     player.fireProjectile(twX, twY);
+                    if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/attacks`).push({ uid: myUid, twX: twX, twY: twY });
                 }
             });
 
             const zone = document.getElementById('joystick-zone'); if (joystickManager) joystickManager.destroy();
             joystickManager = nipplejs.create({ zone: zone, mode: 'static', position: { left: '50%', top: '50%' }, color: 'white', size: 120 });
-            joystickManager.on('move', (evt, data) => { if (data && data.vector && player.hp > 0) { isJoystickActive = true; player.vx = data.vector.x; player.vy = -data.vector.y; } });
+            joystickManager.on('move', (evt, data) => { if (data && data.vector && player.hp > 0 && !player.isDeadProcessed) { isJoystickActive = true; player.vx = data.vector.x; player.vy = -data.vector.y; } });
             joystickManager.on('end', () => { isJoystickActive = false; if(player) {player.vx = 0; player.vy = 0;} });
         }
 
@@ -1015,7 +1031,7 @@
         function cancelAim() { aimingItem = null; updateUI(); }
         
         function activateUlt() {
-            if (player && player.hp > 0 && player.ultGauge >= 100) {
+            if (player && player.hp > 0 && !player.isDeadProcessed && player.ultGauge >= 100) {
                 if (player.heroType === 'circle' || player.heroType === 'square') {
                     player.ultGauge = 0; player.ultActiveTimer = player.heroType === 'square' ? 5000 : 3000;
                     showAnnouncement(player.heroType === 'circle' ? "💦 물줄기 난사!" : "🔥 광폭화 및 치유 오라!"); updateUI();
@@ -1026,20 +1042,25 @@
         }
 
         function activateFlash() {
-            if (player && player.hp > 0 && player.flashCooldown <= 0) {
+            if (player && player.hp > 0 && !player.isDeadProcessed && player.flashCooldown <= 0) {
                 let angle = player.facingAngle;
                 if(player.vx === 0 && player.vy === 0) angle = Math.atan2(mouseY + camera.y - player.y, mouseX + camera.x - player.x);
-                
                 player.x += Math.cos(angle) * 300; player.y += Math.sin(angle) * 300;
-                player.x = Math.max(player.radius, Math.min(MAP_WIDTH - player.radius, player.x));
-                player.y = Math.max(player.radius, Math.min(MAP_HEIGHT - player.radius, player.y));
-                
+                player.x = Math.max(player.radius, Math.min(MAP_WIDTH - player.radius, player.x)); player.y = Math.max(player.radius, Math.min(MAP_HEIGHT - player.radius, player.y));
                 player.flashCooldown = 30000; showAnnouncement("⚡ 점멸!"); updateUI();
             }
         }
 
         function showAnnouncement(msg) { const el = document.getElementById('announcement'); el.innerText = msg; el.style.display = 'block'; setTimeout(() => { el.style.display = 'none'; }, 3500); }
-        function triggerAirdrop() { showAnnouncement("📦 보급이 곧 투하됩니다!"); setTimeout(() => { if (currentState === GAME_STATE.PLAYING) supplyCrates.push(new SupplyCrate(Math.random() * (MAP_WIDTH - 600) + 300, Math.random() * (MAP_HEIGHT - 600) + 300)); }, 3000); }
+        
+        function triggerAirdrop() { 
+            if (isSinglePlayer) {
+                supplyCrates.push(new SupplyCrate(Math.random() * (MAP_WIDTH - 600) + 300, Math.random() * (MAP_HEIGHT - 600) + 300)); 
+                showAnnouncement("📦 보급이 투하됩니다!"); 
+            } else if (isHost) {
+                db.ref(`rooms/${currentRoomId}/events/supplyCrates`).push({ x: Math.random() * (MAP_WIDTH - 600) + 300, y: Math.random() * (MAP_HEIGHT - 600) + 300, id: 'crate_' + Date.now() });
+            }
+        }
 
         function openQuiz(source) {
             activeQuizSource = source; document.querySelector('#quiz-box h2').innerText = source.quiz.type === 'crate' ? '📦 보급품 해제 중...' : '🔍 컨테이너 수색 중...';
@@ -1073,14 +1094,12 @@
         }
 
         function startNewMission() {
-            currentMission = missions[Math.floor(Math.random() * missions.length)]; missionBanner.innerText = currentMission.text;
-            missionBanner.classList.add('mission-pop'); setTimeout(() => missionBanner.classList.remove('mission-pop'), 300);
-            
-            let correctAnswers = [];
-            if (currentMission.type === 'divisor') { for(let i=1; i<=currentMission.target; i++) { if(currentMission.target % i === 0) correctAnswers.push(i); } } 
-            else { for(let i=1; i<=6; i++) correctAnswers.push(currentMission.target * i); }
+            let idx = Math.floor(Math.random() * missions.length);
+            let currentMissionTemp = missions[idx]; let correctAnswers = [];
+            if (currentMissionTemp.type === 'divisor') { for(let i=1; i<=currentMissionTemp.target; i++) { if(currentMissionTemp.target % i === 0) correctAnswers.push(i); } } 
+            else { for(let i=1; i<=6; i++) correctAnswers.push(currentMissionTemp.target * i); }
 
-            orbs = []; 
+            let newOrbs = [];
             for (let i = 0; i < 20; i++) { 
                 let x, y, valid = false, attempts = 0;
                 while (!valid && attempts < 50) {
@@ -1088,7 +1107,15 @@
                     for (let c of containers) { if (x > c.x - 20 && x < c.x + c.w + 20 && y > c.y - 20 && y < c.y + c.h + 20) { valid = false; break; } }
                     attempts++;
                 }
-                if (valid) orbs.push(new ResourceOrb(x, y, (i < 6) ? correctAnswers[Math.floor(Math.random() * correctAnswers.length)] : Math.floor(Math.random() * 30) + 1)); 
+                if (valid) newOrbs.push({ x: x, y: y, number: (i < 6) ? correctAnswers[Math.floor(Math.random() * correctAnswers.length)] : Math.floor(Math.random() * 30) + 1, id: 'orb_' + i + '_' + Date.now() }); 
+            }
+
+            if (isSinglePlayer) {
+                currentMission = missions[idx]; missionBanner.innerText = currentMission.text;
+                missionBanner.classList.add('mission-pop'); setTimeout(() => missionBanner.classList.remove('mission-pop'), 300);
+                orbs = newOrbs.map(o => new ResourceOrb(o.x, o.y, o.number, o.id));
+            } else if (isHost) {
+                db.ref(`rooms/${currentRoomId}/events/mission`).set({ index: idx, orbs: newOrbs });
             }
         }
 
@@ -1100,33 +1127,50 @@
         }
         
         function endGame(msg) {
-            currentState = GAME_STATE.GAME_OVER;
-            const modal = document.getElementById('modal');
+            currentState = GAME_STATE.GAME_OVER; const modal = document.getElementById('modal');
             modal.innerText = msg; modal.style.display = 'block';
             setTimeout(() => { modal.style.display = 'none'; document.getElementById('game-container').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; }, 5000);
         }
 
-        function handleDeath(deadPlayer) {
-            if (deadPlayer.team === 'blue') { stats.blue.deaths++; stats.red.kills++; showModal("사망! 3초 후 리스폰됩니다."); closeQuiz(); } 
-            else { stats.red.deaths++; stats.blue.kills++; showModal("적을 처치했습니다!"); }
-            
-            document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
-            document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
-            
-            if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
-            deadPlayer.hp = 0; deadPlayer.x = -1000; setTimeout(() => { deadPlayer.spawn(); updateUI(); }, 3000); updateUI();
-            checkGameEnd();
+        // 공통 사망/킬로그 처리 로직
+        function handleDeath(deadPlayer, killer) {
+            if (isSinglePlayer) {
+                displayKillLog(killer ? killer.name : '시스템', killer ? killer.team : '', deadPlayer.name, deadPlayer.team);
+                if (deadPlayer.team === 'blue') { stats.blue.deaths++; stats.red.kills++; if(deadPlayer===player) { showModal("사망! 3초 후 리스폰됩니다."); closeQuiz(); } } 
+                else { stats.red.deaths++; stats.blue.kills++; if(killer===player) showModal("적을 처치했습니다!"); }
+                
+                document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
+                document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
+                
+                if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
+                deadPlayer.hp = 0; deadPlayer.x = -1000; deadPlayer.targetX = -1000; deadPlayer.isDeadProcessed = true;
+                setTimeout(() => { deadPlayer.spawn(); updateUI(); }, 3000); updateUI();
+                checkGameEnd();
+            } else {
+                // 멀티플레이: 중복 로그 방지를 위해 '피해자' 본인 또는 '봇의 호스트'일 때만 이벤트를 한 번 발송합니다.
+                if (deadPlayer === player || (isHost && deadPlayer.isBot)) {
+                    db.ref(`rooms/${currentRoomId}/events/killLogs`).push({
+                        killerName: killer ? killer.name : '알 수 없음', killerTeam: killer ? killer.team : '',
+                        victimName: deadPlayer.name, victimTeam: deadPlayer.team,
+                        victimUid: deadPlayer === player ? myUid : deadPlayer.name
+                    });
+                }
+                deadPlayer.hp = 0; deadPlayer.isDeadProcessed = true; // 리스폰은 killLogs 이벤트 리스너에서 통합 처리
+            }
         }
 
         function checkCollisions() {
-            if (player.hp > 0) {
+            if (player.hp > 0 && !player.isDeadProcessed) {
                 for (let i = orbs.length - 1; i >= 0; i--) {
                     let orb = orbs[i];
                     if (Math.hypot(player.x - orb.x, player.y - orb.y) < player.radius + orb.radius) {
                         let isAns = currentMission.type === 'divisor' ? (currentMission.target % orb.number === 0) : (orb.number % currentMission.target === 0);
                         if (isAns) player.buffStacks = Math.min(5, player.buffStacks + 1); else player.slowTimer = 3000; 
+                        
                         orbs.splice(i, 1); updateUI(); 
-                        if (!orbs.some(o => currentMission.type === 'divisor' ? (currentMission.target % o.number === 0) : (o.number % currentMission.target === 0)) || orbs.length === 0) startNewMission();
+                        if (!isSinglePlayer) db.ref(`rooms/${currentRoomId}/events/orbEaten`).push(orb.id);
+                        
+                        if (isSinglePlayer || isHost) { if (!orbs.some(o => currentMission.type === 'divisor' ? (currentMission.target % o.number === 0) : (o.number % currentMission.target === 0)) || orbs.length === 0) startNewMission(); }
                     }
                 }
                 for (let i = heartPacks.length - 1; i >= 0; i--) {
@@ -1138,12 +1182,12 @@
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 let p = projectiles[i]; if (!p.active) continue;
                 for (let t of [player, ...others]) {
-                    if (t && t.hp > 0 && t.invincibleTimer <= 0 && p.owner.team !== t.team && p.owner.realm === t.realm) {
+                    if (t && t.hp > 0 && t.invincibleTimer <= 0 && !t.isDeadProcessed && p.owner.team !== t.team && p.owner.realm === t.realm) {
                         if (Math.hypot(t.x - p.x, t.y - p.y) < t.radius + p.radius) { 
                             let dmg = p.damage; if(t.heroType === 'hexagon' && t.ultActiveTimer > 0) dmg *= 0.8;
                             t.hp -= dmg; p.active = false; 
                             if (!p.owner.isBot && !p.owner.isRemote) { p.owner.ultGauge = Math.min(100, p.owner.ultGauge + 5); updateUI(); }
-                            if(t.hp <= 0) handleDeath(t); 
+                            if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, p.owner); }
                         }
                     }
                 }
@@ -1151,10 +1195,8 @@
         }
 
         function updateDominationUI() {
-            document.getElementById('dom-blue').innerText = Math.floor(domScores.blue);
-            document.getElementById('dom-red').innerText = Math.floor(domScores.red);
-            let m = Math.floor(gameTimeRemaining / 60); let s = Math.floor(gameTimeRemaining % 60);
-            document.getElementById('game-time').innerText = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+            document.getElementById('dom-blue').innerText = Math.floor(domScores.blue); document.getElementById('dom-red').innerText = Math.floor(domScores.red);
+            let m = Math.floor(gameTimeRemaining / 60); let s = Math.floor(gameTimeRemaining % 60); document.getElementById('game-time').innerText = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
         function updateUI() {
@@ -1175,7 +1217,6 @@
             }
         }
 
-        function showModal(msg) { const m = document.getElementById('modal'); m.innerText = msg; m.style.display = 'block'; setTimeout(() => { m.style.display = 'none'; }, 2000); }
         function drawBackground() {
             ctx.fillStyle = '#374151'; ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT); ctx.strokeStyle = 'rgba(250, 204, 21, 0.15)'; ctx.lineWidth = 4;
             for (let x = 0; x < MAP_WIDTH; x += 200) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_HEIGHT); ctx.stroke(); }
@@ -1186,18 +1227,12 @@
             if (currentState !== GAME_STATE.PLAYING) return;
             const dt = timestamp - lastTime; lastTime = timestamp;
 
-            // 멀티플레이어 위치 동기화 (약 100ms마다 내 위치를 DB에 전송)
             if (!isSinglePlayer) {
                 syncTimer -= dt;
                 if (syncTimer <= 0) {
                     syncTimer = 100;
-                    if (player && player.hp > 0 && currentRoomId) {
-                        db.ref(`rooms/${currentRoomId}/players/${myUid}`).update({
-                            x: player.x,
-                            y: player.y,
-                            facingAngle: player.facingAngle,
-                            hp: player.hp
-                        });
+                    if (player && player.hp > 0 && !player.isDeadProcessed && currentRoomId) {
+                        db.ref(`rooms/${currentRoomId}/players/${myUid}`).update({ x: player.x, y: player.y, facingAngle: player.facingAngle, hp: player.hp });
                     }
                 }
             }
@@ -1205,24 +1240,24 @@
             if(selectedGameMode === 'domination') {
                 gameTimeRemaining -= dt/1000;
                 if(gameTimeRemaining <= 0) {
-                    if(domScores.blue > domScores.red) endGame("블루팀 승리! (점령전)");
-                    else if(domScores.red > domScores.blue) endGame("레드팀 승리! (점령전)");
-                    else endGame("무승부!");
+                    if(domScores.blue > domScores.red) endGame("블루팀 승리! (점령전)"); else if(domScores.red > domScores.blue) endGame("레드팀 승리! (점령전)"); else endGame("무승부!");
                     return;
                 }
                 domPoint.update(dt); updateDominationUI();
             }
 
-            airdropTimer -= dt; if (airdropTimer <= 0) { triggerAirdrop(); airdropTimer = 25000; }
+            if(isSinglePlayer || isHost) { airdropTimer -= dt; if (airdropTimer <= 0) { triggerAirdrop(); airdropTimer = 25000; } }
 
-            if (player.hp > 0 && !isJoystickActive && document.getElementById('quiz-modal-container').style.display !== 'flex') {
+            if (player.hp > 0 && !player.isDeadProcessed && !isJoystickActive && document.getElementById('quiz-modal-container').style.display !== 'flex') {
                 let dx = 0, dy = 0;
                 if (keys['KeyW'] || keys['ArrowUp']) dy -= 1; if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
                 if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1; if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
                 if (dx !== 0 || dy !== 0) { const length = Math.sqrt(dx*dx + dy*dy); player.vx = dx / length; player.vy = dy / length; } else { player.vx = 0; player.vy = 0; }
                 
                 if (keys['Space'] && (player.ultActiveTimer <= 0 || player.heroType === 'square')) {
-                    player.fireProjectile(mouseX + camera.x, mouseY + camera.y);
+                    let twX = mouseX + camera.x; let twY = mouseY + camera.y;
+                    player.fireProjectile(twX, twY);
+                    if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/attacks`).push({ uid: myUid, twX: twX, twY: twY });
                 }
             }
 
@@ -1236,10 +1271,9 @@
             activeRealms.forEach(r => r.update(dt)); activeRealms = activeRealms.filter(r => r.active);
             
             if(player.flashCooldown > 0) updateUI(); 
-
             checkCollisions();
 
-            if (player.hp > 0) {
+            if (player.hp > 0 && !player.isDeadProcessed) {
                 camera.x = player.x - viewWidth / 2; camera.y = player.y - viewHeight / 2;
                 camera.x = Math.max(0, Math.min(MAP_WIDTH - viewWidth, camera.x)); camera.y = Math.max(0, Math.min(MAP_HEIGHT - viewHeight, camera.y));
             }
@@ -1256,7 +1290,7 @@
             explosives.forEach(e => { if(e.type === 'mine') e.draw(ctx); }); 
             orbs.forEach(o => o.draw(ctx));
             
-            if (aimingItem && player.hp > 0) {
+            if (aimingItem && player.hp > 0 && !player.isDeadProcessed) {
                 let range = (aimingItem === 'grenade' || aimingItem === 'ult_hexagon') ? 600 : (aimingItem === 'ult_ninja' ? 400 : 150); 
                 let color = aimingItem.includes('ult') ? '#fbbf24' : (aimingItem === 'grenade' ? '#fca5a5' : '#d8b4fe'); 
                 ctx.beginPath(); ctx.arc(player.x, player.y, range, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fill(); ctx.strokeStyle = color; ctx.setLineDash([10, 10]); ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
@@ -1266,8 +1300,8 @@
                 ctx.beginPath(); ctx.moveTo(targetX - 10, targetY - 10); ctx.lineTo(targetX + 10, targetY + 10); ctx.moveTo(targetX + 10, targetY - 10); ctx.lineTo(targetX - 10, targetY + 10); ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.stroke();
             }
 
-            others.forEach(b => { if(b && b.hp > 0) b.draw(ctx); });
-            if (player.hp > 0) player.draw(ctx);
+            others.forEach(b => { if(b && b.hp > 0 && !b.isDeadProcessed) b.draw(ctx); });
+            if (player.hp > 0 && !player.isDeadProcessed) player.draw(ctx);
             
             meleeSlashes.forEach(m => m.draw(ctx));
             projectiles.forEach(p => p.draw(ctx)); 
