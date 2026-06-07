@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Math Arena 3v3 - 이벤트 동기화 및 킬로그</title>
+    <title>Math Arena 3v3 - 로비 및 멀티플레이</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- NippleJS -->
@@ -29,7 +29,7 @@
         .score-red { color: #f87171; }
         .score-numbers { font-size: 24px; font-weight: bold; }
 
-        /* 킬로그 (새로 추가됨) */
+        /* 킬로그 */
         #kill-log-container { position: absolute; top: 80px; right: 20px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; z-index: 100; align-items: flex-end; }
         .kill-log-item { background: rgba(0,0,0,0.75); color: white; padding: 6px 16px; border-radius: 8px; font-size: 16px; border: 1px solid rgba(255,255,255,0.3); animation: fadeOut 4.5s forwards; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         @keyframes fadeOut { 0% { opacity: 1; transform: translateX(20px); } 10% { transform: translateX(0); } 80% { opacity: 1; } 100% { opacity: 0; display: none; } }
@@ -69,6 +69,9 @@
         .quiz-option { background: #3b82f6; border: 2px solid #2563eb; color: white; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 20px; cursor: pointer; transition: background 0.2s; }
         .quiz-option:hover { background: #2563eb; }
 
+        /* 시작 카운트다운 */
+        #countdown-overlay { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 250; color: #fbbf24; font-size: 120px; font-weight: bold; justify-content: center; align-items: center; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+
         /* Menus */
         .fullscreen-menu { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; }
         .hidden-menu { display: none !important; }
@@ -104,6 +107,21 @@
         .player-item { background: rgba(0,0,0,0.6); padding: 10px; margin: 5px 0; border-radius: 8px; color: white; display: flex; justify-content: space-between; align-items: center;}
         .status-ready { color: #48bb78; font-weight: bold; }
         .status-wait { color: #a0aec0; }
+
+        /* 기기별 화면 최적화 (모바일 지원) */
+        @media (max-width: 768px) {
+            #skill-zone { transform: scale(0.8); transform-origin: bottom right; bottom: 10px; right: 10px; gap: 10px; }
+            #joystick-zone { transform: scale(0.8); transform-origin: bottom left; bottom: 10px; left: 10px; }
+            #player-stats { transform: scale(0.8) translateX(-50%); transform-origin: bottom left; left: 50%; bottom: 10px; }
+            #scoreboard { font-size: 16px; padding: 5px 10px; gap: 10px; }
+            .score-numbers { font-size: 20px; }
+            #mission-banner { font-size: 18px; padding: 5px 15px; }
+            .hero-card { width: 140px; padding: 10px; }
+            .hero-icon { width: 50px; height: 50px; margin-bottom: 5px; }
+            .menu-btn { font-size: 20px; padding: 10px 20px; width: 220px; }
+            .team-box { width: 250px; min-height: 150px; }
+            #countdown-overlay { font-size: 80px; }
+        }
     </style>
 </head>
 <body>
@@ -123,7 +141,13 @@
             <label class="mode-option"><input type="radio" name="spGameMode" value="deathmatch"> 100킬전</label>
         </div>
         <div class="hero-cards" id="sp-hero-cards"></div>
-        <div class="mb-4 text-white text-xl"><label for="bot-count" class="mr-4">적(봇) 수:</label><input type="number" id="bot-count" value="3" min="1" max="5" class="text-black text-center w-20 p-1 rounded font-bold"></div>
+        <div class="mb-4 text-white text-xl">
+            <label for="player-nickname-sp" class="mr-2">내 이름:</label>
+            <!-- 기본값을 비워두어 사용자가 직접 타이핑하도록 유도 -->
+            <input type="text" id="player-nickname-sp" maxlength="4" placeholder="최대 4자" class="text-black text-center w-24 p-1 rounded font-bold mr-4" value="">
+            <label for="bot-count" class="mr-2">적(봇) 수:</label>
+            <input type="number" id="bot-count" value="3" min="1" max="5" class="text-black text-center w-16 p-1 rounded font-bold">
+        </div>
         <button class="menu-btn" onclick="startSinglePlayer()">레디 (게임 시작)</button>
     </div>
 
@@ -131,8 +155,9 @@
         <button class="absolute top-5 left-5 bg-gray-700 text-white px-4 py-2 rounded-lg font-bold" onclick="showMenu('start-screen')">⬅ 메인으로</button>
         <h1 class="text-5xl text-yellow-400 mb-8 drop-shadow-lg">멀티플레이 로비</h1>
         <div class="lobby-box">
-            <p class="text-xl text-white mb-2">닉네임</p>
-            <input type="text" id="player-nickname" class="input-text" placeholder="이름을 입력하세요" value="용사">
+            <p class="text-xl text-white mb-2">닉네임 (최대 4자)</p>
+            <!-- 기본값을 비워두어 사용자가 직접 타이핑하도록 유도 -->
+            <input type="text" id="player-nickname-mp" class="input-text" maxlength="4" placeholder="이름을 입력하세요" value="">
             <div class="mt-8"><button class="menu-btn" onclick="createRoom()">새로운 방 만들기</button></div>
             <div class="mt-8 border-t border-gray-500 pt-6">
                 <input type="text" id="join-room-id" class="input-text" placeholder="방 번호 입력"><br>
@@ -150,7 +175,7 @@
             <label class="mode-option"><input type="radio" name="mpGameMode" value="deathmatch" onchange="updateRoomMode()"> 100킬전</label>
         </div>
 
-        <div class="flex gap-10 w-full max-w-4xl justify-center mb-4">
+        <div class="flex gap-10 w-full max-w-4xl justify-center mb-4 flex-wrap">
             <div class="team-box team-blue">
                 <h3 class="text-2xl text-blue-300 text-center mb-4 font-bold">블루팀</h3>
                 <div id="mp-blue-list"></div>
@@ -174,7 +199,8 @@
     <!-- UI Overlays -->
     <div id="modal">메시지</div>
     <div id="announcement">📦 보급이 곧 투하됩니다!</div>
-    <div id="kill-log-container"></div> <!-- 킬로그 컨테이너 추가 -->
+    <div id="countdown-overlay">3</div>
+    <div id="kill-log-container"></div>
 
     <div id="quiz-modal-container">
         <div id="quiz-box">
@@ -256,6 +282,7 @@
 
         const GAME_STATE = { MENU: 0, PLAYING: 1, GAME_OVER: 2 };
         let currentState = GAME_STATE.MENU;
+        let isGameActive = false; // 카운트다운 완료 후 true
         
         let myUid = "uid_" + Math.random().toString(36).substr(2, 9);
         let currentRoomId = null;
@@ -318,7 +345,8 @@
         renderHeroCards('sp-hero-cards', false); renderHeroCards('mp-hero-cards', true);
 
         function createRoom() {
-            const name = document.getElementById('player-nickname').value || '용사';
+            // 빈값이면 유저+랜덤숫자로 식별
+            const name = document.getElementById('player-nickname-mp').value.trim() || '유저' + Math.floor(Math.random()*1000);
             const roomId = Math.floor(1000 + Math.random() * 9000).toString(); 
             db.ref('rooms/' + roomId).set({ status: 'waiting', mode: 'domination', host: myUid }).then(() => {
                 isHost = true; joinRoom(roomId, name);
@@ -327,7 +355,7 @@
 
         function joinRoomBtn() {
             const roomId = document.getElementById('join-room-id').value;
-            const name = document.getElementById('player-nickname').value || '용사';
+            const name = document.getElementById('player-nickname-mp').value.trim() || '유저' + Math.floor(Math.random()*1000);
             if(!roomId) return showModal("방 번호를 입력하세요!");
             db.ref('rooms/' + roomId).once('value', snapshot => {
                 if(snapshot.exists()) { isHost = (snapshot.val().host === myUid); joinRoom(roomId, name); } 
@@ -353,7 +381,7 @@
                     for(let uid in data.players) {
                         if(uid === myUid) continue; 
                         let pData = data.players[uid]; let p = remotePlayers[uid];
-                        if(p && !p.isDeadProcessed) { // 사망 처리 중에는 보간 무시
+                        if(p && !p.isDeadProcessed) { 
                             if (pData.x !== undefined) p.targetX = pData.x;
                             if (pData.y !== undefined) p.targetY = pData.y;
                             if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
@@ -414,7 +442,7 @@
 
         function startMultiplayer() { 
             if(isHost && currentRoomId) {
-                db.ref(`rooms/${currentRoomId}/events`).remove(); // 시작 전 이벤트 초기화
+                db.ref(`rooms/${currentRoomId}/events`).remove();
                 db.ref('rooms/' + currentRoomId).update({ status: 'playing' }); 
             }
         }
@@ -422,10 +450,30 @@
         function startSinglePlayer() {
             isSinglePlayer = true;
             let botCount = parseInt(document.getElementById('bot-count').value) || 3;
-            let pData = { [myUid]: { team: 'blue', hero: selectedHeroType, name: '나' } };
+            let myName = document.getElementById('player-nickname-sp').value.trim() || '용사';
+            let pData = { [myUid]: { team: 'blue', hero: selectedHeroType, name: myName } };
             const types = ['circle', 'square', 'triangle', 'hexagon'];
             for(let i=0; i<botCount; i++) pData['bot_'+i] = { team: 'red', hero: types[Math.floor(Math.random()*types.length)], isBot: true, name: '봇'+(i+1) };
             enterIngame(document.querySelector('input[name="spGameMode"]:checked').value, pData);
+        }
+
+        function triggerNewMissionSync() {
+            let idx = Math.floor(Math.random() * missions.length);
+            let currentMissionTemp = missions[idx]; let correctAnswers = [];
+            if (currentMissionTemp.type === 'divisor') { for(let i=1; i<=currentMissionTemp.target; i++) { if(currentMissionTemp.target % i === 0) correctAnswers.push(i); } } 
+            else { for(let i=1; i<=6; i++) correctAnswers.push(currentMissionTemp.target * i); }
+
+            let newOrbs = [];
+            for (let i = 0; i < 20; i++) { 
+                let x, y, valid = false, attempts = 0;
+                while (!valid && attempts < 50) {
+                    x = Math.random() * (MAP_WIDTH - 200) + 100; y = Math.random() * (MAP_HEIGHT - 200) + 100; valid = true;
+                    for (let c of containers) { if (x > c.x - 20 && x < c.x + c.w + 20 && y > c.y - 20 && y < c.y + c.h + 20) { valid = false; break; } }
+                    attempts++;
+                }
+                if (valid) newOrbs.push({ x: x, y: y, number: (i < 6) ? correctAnswers[Math.floor(Math.random() * correctAnswers.length)] : Math.floor(Math.random() * 30) + 1, id: 'orb_' + i + '_' + Date.now() }); 
+            }
+            db.ref(`rooms/${currentRoomId}/events/mission`).set({ index: idx, orbs: newOrbs });
         }
 
         function enterIngame(mode, playersData) {
@@ -436,9 +484,10 @@
 
             initMap(); projectiles = []; meleeSlashes = []; orbs = []; supplyCrates = []; explosives = []; heartPacks = []; activeRealms = [];
             stats = { blue: { kills: 0, deaths: 0 }, red: { kills: 0, deaths: 0 } }; others = []; remotePlayers = {}; 
+            isGameActive = false; // 카운트다운 전까지 비활성화
 
             for (const [uid, pData] of Object.entries(playersData)) {
-                if (uid === myUid) { player = new Player(pData.team, false, pData.hero, pData.name || '나'); myTeam = pData.team; } 
+                if (uid === myUid) { player = new Player(pData.team, false, pData.hero, pData.name || '용사'); myTeam = pData.team; } 
                 else { 
                     let newP = new Player(pData.team, pData.isBot || false, pData.hero, pData.name);
                     if (!isSinglePlayer && !pData.isBot) { newP.isRemote = true; remotePlayers[uid] = newP; }
@@ -451,14 +500,37 @@
             if (isSinglePlayer) startNewMission();
             else { setupMultiplayerListeners(); if (isHost) triggerNewMissionSync(); }
 
+            // 3, 2, 1 카운트다운 시작
+            startCountdown(() => {
+                isGameActive = true; 
+            });
+
             currentState = GAME_STATE.PLAYING; lastTime = performance.now(); syncTimer = 0; requestAnimationFrame(gameLoop);
         }
 
-        // --- Firebase 이벤트 리스너 세팅 (동기화 핵심) ---
+        function startCountdown(callback) {
+            const overlay = document.getElementById('countdown-overlay');
+            overlay.style.display = 'flex';
+            let count = 3;
+            overlay.innerText = count;
+            
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    overlay.innerText = count;
+                } else if (count === 0) {
+                    overlay.innerText = 'START!';
+                } else {
+                    clearInterval(interval);
+                    overlay.style.display = 'none';
+                    callback();
+                }
+            }, 1000);
+        }
+
         function setupMultiplayerListeners() {
             const eventsRef = db.ref(`rooms/${currentRoomId}/events`);
             
-            // 1. 킬로그 및 스코어 동기화
             eventsRef.child('killLogs').on('child_added', snap => {
                 const data = snap.val();
                 displayKillLog(data.killerName, data.killerTeam, data.victimName, data.victimTeam);
@@ -487,20 +559,17 @@
                 checkGameEnd();
             });
 
-            // 2. 공격(기본 모션) 동기화
             eventsRef.child('attacks').on('child_added', snap => {
                 const data = snap.val(); if(data.uid === myUid) return;
                 const p = remotePlayers[data.uid];
                 if(p && !p.isDeadProcessed) p.fireProjectile(data.twX, data.twY);
             });
 
-            // 3. 보급품 투하 동기화
             eventsRef.child('supplyCrates').on('child_added', snap => {
                 const data = snap.val(); supplyCrates.push(new SupplyCrate(data.x, data.y, data.id));
                 showAnnouncement("📦 보급이 투하되었습니다!");
             });
 
-            // 4. 미션 & 오브젝트(구슬) 동기화
             eventsRef.child('mission').on('value', snap => {
                 const data = snap.val(); if(!data) return;
                 currentMission = missions[data.index];
@@ -975,7 +1044,7 @@
             canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); if (aimingItem) cancelAim(); });
 
             canvas.addEventListener('pointerdown', (e) => {
-                if (player.hp <= 0 || player.isDeadProcessed) return;
+                if (player.hp <= 0 || player.isDeadProcessed || !isGameActive) return;
                 let twX = e.clientX + camera.x; let twY = e.clientY + camera.y;
 
                 if (aimingItem) {
@@ -1023,15 +1092,15 @@
 
             const zone = document.getElementById('joystick-zone'); if (joystickManager) joystickManager.destroy();
             joystickManager = nipplejs.create({ zone: zone, mode: 'static', position: { left: '50%', top: '50%' }, color: 'white', size: 120 });
-            joystickManager.on('move', (evt, data) => { if (data && data.vector && player.hp > 0 && !player.isDeadProcessed) { isJoystickActive = true; player.vx = data.vector.x; player.vy = -data.vector.y; } });
+            joystickManager.on('move', (evt, data) => { if (data && data.vector && player.hp > 0 && !player.isDeadProcessed && isGameActive) { isJoystickActive = true; player.vx = data.vector.x; player.vy = -data.vector.y; } });
             joystickManager.on('end', () => { isJoystickActive = false; if(player) {player.vx = 0; player.vy = 0;} });
         }
 
-        function toggleAim(type) { if (player.hp <= 0) return; if ((type === 'mine' || type === 'grenade') && player.inventory[type] <= 0) return; aimingItem = aimingItem === type ? null : type; updateUI(); }
+        function toggleAim(type) { if (player.hp <= 0 || !isGameActive) return; if ((type === 'mine' || type === 'grenade') && player.inventory[type] <= 0) return; aimingItem = aimingItem === type ? null : type; updateUI(); }
         function cancelAim() { aimingItem = null; updateUI(); }
         
         function activateUlt() {
-            if (player && player.hp > 0 && !player.isDeadProcessed && player.ultGauge >= 100) {
+            if (player && player.hp > 0 && !player.isDeadProcessed && player.ultGauge >= 100 && isGameActive) {
                 if (player.heroType === 'circle' || player.heroType === 'square') {
                     player.ultGauge = 0; player.ultActiveTimer = player.heroType === 'square' ? 5000 : 3000;
                     showAnnouncement(player.heroType === 'circle' ? "💦 물줄기 난사!" : "🔥 광폭화 및 치유 오라!"); updateUI();
@@ -1042,7 +1111,7 @@
         }
 
         function activateFlash() {
-            if (player && player.hp > 0 && !player.isDeadProcessed && player.flashCooldown <= 0) {
+            if (player && player.hp > 0 && !player.isDeadProcessed && player.flashCooldown <= 0 && isGameActive) {
                 let angle = player.facingAngle;
                 if(player.vx === 0 && player.vy === 0) angle = Math.atan2(mouseY + camera.y - player.y, mouseX + camera.x - player.x);
                 player.x += Math.cos(angle) * 300; player.y += Math.sin(angle) * 300;
@@ -1093,32 +1162,6 @@
             closeQuiz();
         }
 
-        function startNewMission() {
-            let idx = Math.floor(Math.random() * missions.length);
-            let currentMissionTemp = missions[idx]; let correctAnswers = [];
-            if (currentMissionTemp.type === 'divisor') { for(let i=1; i<=currentMissionTemp.target; i++) { if(currentMissionTemp.target % i === 0) correctAnswers.push(i); } } 
-            else { for(let i=1; i<=6; i++) correctAnswers.push(currentMissionTemp.target * i); }
-
-            let newOrbs = [];
-            for (let i = 0; i < 20; i++) { 
-                let x, y, valid = false, attempts = 0;
-                while (!valid && attempts < 50) {
-                    x = Math.random() * (MAP_WIDTH - 200) + 100; y = Math.random() * (MAP_HEIGHT - 200) + 100; valid = true;
-                    for (let c of containers) { if (x > c.x - 20 && x < c.x + c.w + 20 && y > c.y - 20 && y < c.y + c.h + 20) { valid = false; break; } }
-                    attempts++;
-                }
-                if (valid) newOrbs.push({ x: x, y: y, number: (i < 6) ? correctAnswers[Math.floor(Math.random() * correctAnswers.length)] : Math.floor(Math.random() * 30) + 1, id: 'orb_' + i + '_' + Date.now() }); 
-            }
-
-            if (isSinglePlayer) {
-                currentMission = missions[idx]; missionBanner.innerText = currentMission.text;
-                missionBanner.classList.add('mission-pop'); setTimeout(() => missionBanner.classList.remove('mission-pop'), 300);
-                orbs = newOrbs.map(o => new ResourceOrb(o.x, o.y, o.number, o.id));
-            } else if (isHost) {
-                db.ref(`rooms/${currentRoomId}/events/mission`).set({ index: idx, orbs: newOrbs });
-            }
-        }
-
         function checkGameEnd() {
             if(selectedGameMode === 'deathmatch') {
                 if(stats.blue.kills >= 100) endGame("블루팀 승리! (100킬 달성)");
@@ -1130,33 +1173,6 @@
             currentState = GAME_STATE.GAME_OVER; const modal = document.getElementById('modal');
             modal.innerText = msg; modal.style.display = 'block';
             setTimeout(() => { modal.style.display = 'none'; document.getElementById('game-container').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; }, 5000);
-        }
-
-        // 공통 사망/킬로그 처리 로직
-        function handleDeath(deadPlayer, killer) {
-            if (isSinglePlayer) {
-                displayKillLog(killer ? killer.name : '시스템', killer ? killer.team : '', deadPlayer.name, deadPlayer.team);
-                if (deadPlayer.team === 'blue') { stats.blue.deaths++; stats.red.kills++; if(deadPlayer===player) { showModal("사망! 3초 후 리스폰됩니다."); closeQuiz(); } } 
-                else { stats.red.deaths++; stats.blue.kills++; if(killer===player) showModal("적을 처치했습니다!"); }
-                
-                document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
-                document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
-                
-                if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
-                deadPlayer.hp = 0; deadPlayer.x = -1000; deadPlayer.targetX = -1000; deadPlayer.isDeadProcessed = true;
-                setTimeout(() => { deadPlayer.spawn(); updateUI(); }, 3000); updateUI();
-                checkGameEnd();
-            } else {
-                // 멀티플레이: 중복 로그 방지를 위해 '피해자' 본인 또는 '봇의 호스트'일 때만 이벤트를 한 번 발송합니다.
-                if (deadPlayer === player || (isHost && deadPlayer.isBot)) {
-                    db.ref(`rooms/${currentRoomId}/events/killLogs`).push({
-                        killerName: killer ? killer.name : '알 수 없음', killerTeam: killer ? killer.team : '',
-                        victimName: deadPlayer.name, victimTeam: deadPlayer.team,
-                        victimUid: deadPlayer === player ? myUid : deadPlayer.name
-                    });
-                }
-                deadPlayer.hp = 0; deadPlayer.isDeadProcessed = true; // 리스폰은 killLogs 이벤트 리스너에서 통합 처리
-            }
         }
 
         function checkCollisions() {
@@ -1217,6 +1233,15 @@
             }
         }
 
+        function showModal(msg) {
+            const m = document.getElementById('modal');
+            if(m) {
+                m.innerText = msg;
+                m.style.display = 'block';
+                setTimeout(() => { m.style.display = 'none'; }, 2000);
+            }
+        }
+
         function drawBackground() {
             ctx.fillStyle = '#374151'; ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT); ctx.strokeStyle = 'rgba(250, 204, 21, 0.15)'; ctx.lineWidth = 4;
             for (let x = 0; x < MAP_WIDTH; x += 200) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_HEIGHT); ctx.stroke(); }
@@ -1227,7 +1252,7 @@
             if (currentState !== GAME_STATE.PLAYING) return;
             const dt = timestamp - lastTime; lastTime = timestamp;
 
-            if (!isSinglePlayer) {
+            if (!isSinglePlayer && isGameActive) {
                 syncTimer -= dt;
                 if (syncTimer <= 0) {
                     syncTimer = 100;
@@ -1237,7 +1262,7 @@
                 }
             }
 
-            if(selectedGameMode === 'domination') {
+            if(selectedGameMode === 'domination' && isGameActive) {
                 gameTimeRemaining -= dt/1000;
                 if(gameTimeRemaining <= 0) {
                     if(domScores.blue > domScores.red) endGame("블루팀 승리! (점령전)"); else if(domScores.red > domScores.blue) endGame("레드팀 승리! (점령전)"); else endGame("무승부!");
@@ -1246,9 +1271,9 @@
                 domPoint.update(dt); updateDominationUI();
             }
 
-            if(isSinglePlayer || isHost) { airdropTimer -= dt; if (airdropTimer <= 0) { triggerAirdrop(); airdropTimer = 25000; } }
+            if((isSinglePlayer || isHost) && isGameActive) { airdropTimer -= dt; if (airdropTimer <= 0) { triggerAirdrop(); airdropTimer = 25000; } }
 
-            if (player.hp > 0 && !player.isDeadProcessed && !isJoystickActive && document.getElementById('quiz-modal-container').style.display !== 'flex') {
+            if (player.hp > 0 && !player.isDeadProcessed && !isJoystickActive && isGameActive && document.getElementById('quiz-modal-container').style.display !== 'flex') {
                 let dx = 0, dy = 0;
                 if (keys['KeyW'] || keys['ArrowUp']) dy -= 1; if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
                 if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1; if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
@@ -1261,8 +1286,8 @@
                 }
             }
 
-            if (player.hp > 0) player.update(dt); 
-            others.forEach(b => { if(b && b.hp > 0) b.update(dt); });
+            if (player.hp > 0 && isGameActive) player.update(dt); 
+            if (isGameActive) others.forEach(b => { if(b && b.hp > 0) b.update(dt); });
             
             supplyCrates.forEach(c => c.update(dt)); 
             projectiles.forEach(p => p.update()); projectiles = projectiles.filter(p => p.active);
@@ -1271,7 +1296,7 @@
             activeRealms.forEach(r => r.update(dt)); activeRealms = activeRealms.filter(r => r.active);
             
             if(player.flashCooldown > 0) updateUI(); 
-            checkCollisions();
+            if(isGameActive) checkCollisions();
 
             if (player.hp > 0 && !player.isDeadProcessed) {
                 camera.x = player.x - viewWidth / 2; camera.y = player.y - viewHeight / 2;
