@@ -601,19 +601,12 @@
                 document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
                 document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
 
-                if (data.victimUid === myUid) {
-                    if(!player.isDeadProcessed) { 
-                        showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
-                        player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
-                        if(player.realm) { player.realm.active = false; player.realm = null; }
-                        setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
-                    }
-                } else {
+                // 원격 플레이어 화면에서 숨기기 (내 캐릭터의 부활/리스폰은 이미 handleDeath에서 자체 처리됨)
+                if (data.victimUid !== myUid) {
                     let deadP = remotePlayers[data.victimUid] || others.find(b => b.name === data.victimName);
                     if (deadP && !deadP.isDeadProcessed) { 
                         deadP.hp = 0; deadP.x = -1000; deadP.targetX = -1000; deadP.isDeadProcessed = true;
                         if(deadP.realm) { deadP.realm.active = false; deadP.realm = null; }
-                        if (isHost && deadP.isBot) setTimeout(() => { deadP.spawn(); }, 3000);
                     }
                 }
                 
@@ -1330,7 +1323,21 @@
                         victimUid: deadPlayer === player ? myUid : deadPlayer.name
                     });
                 }
-                deadPlayer.hp = 0; deadPlayer.isDeadProcessed = true; 
+                
+                // === 부활 및 상태 초기화 로직 (서버 대기 없이 즉시 실행) ===
+                if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
+                deadPlayer.hp = 0; 
+                deadPlayer.x = -1000; 
+                deadPlayer.targetX = -1000; 
+                deadPlayer.isDeadProcessed = true; 
+
+                // 내가 제어하는 캐릭터(나 자신 또는 방장일 경우 봇)라면 3초 후 스폰 타이머 작동
+                if (deadPlayer === player) {
+                    showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
+                    setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
+                } else if (isHost && deadPlayer.isBot) {
+                    setTimeout(() => { deadPlayer.spawn(); }, 3000);
+                }
             }
         }
 
