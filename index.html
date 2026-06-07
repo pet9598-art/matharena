@@ -281,7 +281,6 @@
         let myUid = "uid_" + Math.random().toString(36).substr(2, 9);
         let currentRoomId = null;
         let isHost = false, isReady = false, myTeam = 'blue', isSinglePlayer = true;
-        let roomListener = null;
         let animationFrameId = null; 
 
         const MAP_WIDTH = 3200;
@@ -375,47 +374,65 @@
             document.getElementById('display-room-id').innerText = roomId; showMenu('multiplayer-room');
             document.querySelectorAll('input[name="mpGameMode"]').forEach(el => el.disabled = !isHost);
             
-            roomListener = db.ref('rooms/' + roomId).on('value', snapshot => {
-                const data = snapshot.val();
-                if(!data) { leaveRoom(); return showModal("방이 사라졌습니다."); }
+            // 🚨 핵심 교정 1: 방 전체(이벤트, 수백개의 킬로그 포함)를 매번 다운로드하지 않도록 리스너를 노드별로 분리
+            db.ref(`rooms/${roomId}/status`).on('value', snap => {
+                const status = snap.val();
+                if(!status) { leaveRoom(); return showModal("방이 사라졌습니다."); }
+                if(status === 'playing' && currentState === GAME_STATE.MENU) {
+                    db.ref(`rooms/${roomId}`).once('value').then(s => {
+                        let data = s.val();
+                        enterIngame(data.mode, data.players);
+                    });
+                }
+            });
+
+            db.ref(`rooms/${roomId}/mode`).on('value', snap => {
+                if(currentState === GAME_STATE.MENU && snap.val()) {
+                    document.querySelector(`input[name="mpGameMode"][value="${snap.val()}"]`).checked = true;
+                }
+            });
+
+            // 플레이어들의 위치 및 상태만 가볍게 동기화
+            db.ref(`rooms/${roomId}/players`).on('value', snap => {
+                const playersData = snap.val();
+                if(!playersData) return;
                 
-                if(data.status === 'playing' && currentState === GAME_STATE.MENU) enterIngame(data.mode, data.players);
-                
-                // 멀티플레이어 동기화 수신 로직 (부활 누락 버그 해결)
-                if(currentState === GAME_STATE.PLAYING && data.players) {
-                    for(let uid in data.players) {
+                if (currentState === GAME_STATE.MENU) {
+                    updateRoomUI(playersData);
+                } else if (currentState === GAME_STATE.PLAYING) {
+                    for(let uid in playersData) {
                         if(uid === myUid) continue; 
-                        let pData = data.players[uid]; let p = remotePlayers[uid];
+                        let pData = playersData[uid]; let p = remotePlayers[uid];
                         
                         if(p) { 
-                            // 1. 데이터베이스에 HP가 살아있으면 내 클라이언트에서도 즉시 부활 처리! (투명화 버그 해결)
+                            // 🚨 핵심 교정 2: 죽었다가 DB에서 HP가 다시 찬 경우 무조건 강제 부활 (Snap)
+                            let justRespawned = p.isDeadProcessed && (pData.hp > 0);
+                            
                             if (pData.hp !== undefined) {
                                 p.hp = pData.hp;
-                                p.isDeadProcessed = (p.hp <= 0); // HP 기반으로 생사 상태를 완벽히 동기화
+                                p.isDeadProcessed = (p.hp <= 0); 
                             }
 
-                            // 2. 살아있는 경우에만 위치 업데이트 적용
                             if (!p.isDeadProcessed) {
                                 if (pData.x !== undefined) p.targetX = pData.x;
                                 if (pData.y !== undefined) p.targetY = pData.y;
                                 if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
+                                
+                                // 화면 밖에 있다가 부활했으므로 즉시 해당 위치로 강제이동 (안그러면 걸어오느라 안보임)
+                                if (justRespawned) {
+                                    p.x = p.targetX;
+                                    p.y = p.targetY;
+                                }
                             } else {
-                                // 죽은 상태면 화면에서 확실히 치움
                                 p.targetX = -1000;
                                 p.x = -1000;
                             }
 
-                            // 3. 궁극기, 버프, 무적 타이머 동기화
                             if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
                             if (pData.buff !== undefined) p.buffStacks = pData.buff;
                             if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
                         }
                     }
-                }
-
-                if(currentState === GAME_STATE.MENU) {
-                    if(data.mode) document.querySelector(`input[name="mpGameMode"][value="${data.mode}"]`).checked = true;
-                    updateRoomUI(data.players || {});
                 }
             });
         }
@@ -459,7 +476,22 @@
         function updateRoomMode() { if(isHost && currentRoomId) db.ref('rooms/' + currentRoomId).update({ mode: document.querySelector('input[name="mpGameMode"]:checked').value }); }
         
         function leaveRoom() {
-            if(currentRoomId) { db.ref(`rooms/${currentRoomId}/players/${myUid}`).remove(); if(roomListener) db.ref('rooms/' + currentRoomId).off('value', roomListener); currentRoomId = null; isHost = false; }
+            if(currentRoomId) { 
+                db.ref(`rooms/${currentRoomId}/players/${myUid}`).remove(); 
+                
+                // 데이터 누수 및 중복 리스너 방지를 위한 모든 채널 연결 해제
+                db.ref(`rooms/${currentRoomId}/status`).off();
+                db.ref(`rooms/${currentRoomId}/mode`).off();
+                db.ref(`rooms/${currentRoomId}/players`).off();
+                db.ref(`rooms/${currentRoomId}/events/killLogs`).off();
+                db.ref(`rooms/${currentRoomId}/events/attacks`).off();
+                db.ref(`rooms/${currentRoomId}/events/skills`).off();
+                db.ref(`rooms/${currentRoomId}/events/supplyCrates`).off();
+                db.ref(`rooms/${currentRoomId}/events/mission`).off();
+                db.ref(`rooms/${currentRoomId}/events/orbEaten`).off();
+                
+                currentRoomId = null; isHost = false; 
+            }
             showMenu('multiplayer-lobby');
         }
 
@@ -570,7 +602,7 @@
                 document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
 
                 if (data.victimUid === myUid) {
-                    if(!player.isDeadProcessed) { // 중복 실행 방지
+                    if(!player.isDeadProcessed) { 
                         showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
                         player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
                         if(player.realm) { player.realm.active = false; player.realm = null; }
@@ -578,7 +610,7 @@
                     }
                 } else {
                     let deadP = remotePlayers[data.victimUid] || others.find(b => b.name === data.victimName);
-                    if (deadP && !deadP.isDeadProcessed) { // 중복 실행 방지
+                    if (deadP && !deadP.isDeadProcessed) { 
                         deadP.hp = 0; deadP.x = -1000; deadP.targetX = -1000; deadP.isDeadProcessed = true;
                         if(deadP.realm) { deadP.realm.active = false; deadP.realm = null; }
                         if (isHost && deadP.isBot) setTimeout(() => { deadP.spawn(); }, 3000);
@@ -593,6 +625,28 @@
                 const data = snap.val(); if(data.uid === myUid) return;
                 const p = remotePlayers[data.uid];
                 if(p && !p.isDeadProcessed) p.fireProjectile(data.twX, data.twY);
+            });
+
+            // 🚨 핵심 교정 3: 궁극기, 지뢰, 수류탄, 점멸 등 상대방에게 안보이고 데미지도 없던 스킬 완벽 동기화
+            eventsRef.child('skills').on('child_added', snap => {
+                const data = snap.val(); if(data.uid === myUid) return;
+                const p = remotePlayers[data.uid];
+                if(!p || p.isDeadProcessed) return;
+
+                if (data.type === 'grenade') {
+                    explosives.push(new Explosive('grenade', p.x, p.y, p, data.finalX, data.finalY));
+                } else if (data.type === 'mine') {
+                    explosives.push(new Explosive('mine', data.finalX, data.finalY, p));
+                } else if (data.type === 'ult_activate') {
+                    p.ultActiveTimer = p.heroType === 'square' ? 5000 : 3000;
+                } else if (data.type === 'ult_ninja') {
+                    let t = [player, ...others].find(b => b.name === data.targetName);
+                    if(t) activeRealms.push(new Realm(p, t));
+                } else if (data.type === 'ult_hexagon') {
+                    p.x = data.twX; p.y = data.twY; p.ultActiveTimer = 3000;
+                } else if (data.type === 'flash') {
+                    p.x = data.x; p.y = data.y; p.targetX = data.x; p.targetY = data.y;
+                }
             });
 
             eventsRef.child('supplyCrates').on('child_added', snap => {
@@ -888,34 +942,10 @@
                 this.targetX = this.x; this.targetY = this.y;
             }
             update(dt) {
-                // 리모트 플레이어(적)도 무적/궁극기 타이머가 정상적으로 깎이도록 처리
                 if(this.invincibleTimer > 0) this.invincibleTimer -= dt;
                 if(this.flashCooldown > 0) this.flashCooldown -= dt;
 
-                if (this.isRemote && !this.isDeadProcessed) {
-                    if (this.targetX !== undefined && !Number.isNaN(this.targetX)) this.x += (this.targetX - this.x) * 0.2;
-                    if (this.targetY !== undefined && !Number.isNaN(this.targetY)) this.y += (this.targetY - this.y) * 0.2;
-                    if (this.ultActiveTimer > 0) this.ultActiveTimer -= dt;
-                    return; 
-                }
-                
-                let speedMult = 1.0; let coolMult = 1.0;
-                if (this.realm && this.heroType === 'triangle' && this.realm.ninja === this) {
-                    this.hp = Math.min(this.maxHp, this.hp + 15 * (dt/1000)); speedMult = 1.3; coolMult = 0.5;
-                }
-                if (this.heroType === 'square' && this.ultActiveTimer > 0) coolMult = 0.5;
-
-                let currentBaseSpeed = (this.baseSpeed + (this.buffStacks * 0.08)) * speedMult;
-                this.attackCooldown = Math.max(100, (this.baseCooldown - (this.buffStacks * 10))) * coolMult;
-                if (this.slowTimer > 0) { this.slowTimer -= dt; this.speed = currentBaseSpeed * 0.5; } else { this.speed = currentBaseSpeed; }
-
-                if (!this.isBot && this.hp > 0 && this.ultGauge < 100) {
-                    this.ultGauge = Math.min(100, this.ultGauge + (2.5 * dt / 1000));
-                    if (Math.floor(this.ultGauge) !== Math.floor(this.ultGauge - (2.5 * dt / 1000))) updateUI();
-                }
-
-                if (this.vx !== 0 || this.vy !== 0) this.facingAngle = Math.atan2(this.vy, this.vx);
-
+                // 🚨 핵심 교정 3-1: 상대방(원격 플레이어)도 화면상에서 궁극기 로직을 똑같이 실행하도록 위로 올림
                 if (this.ultActiveTimer > 0) {
                     this.ultActiveTimer -= dt;
                     if (this.heroType === 'circle') {
@@ -937,12 +967,38 @@
                         for (let t of [player, ...others]) {
                             if (t && t.realm === this.realm && Math.hypot(t.x - this.x, t.y - this.y) <= 150) {
                                 if (t.team === this.team) t.hp = Math.min(t.maxHp, t.hp + 15 * (dt/1000));
-                                else { t.hp -= 15 * (dt/1000); if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this); } }
+                                else { 
+                                    t.hp -= 15 * (dt/1000); 
+                                    if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this); } 
+                                }
                             }
                         }
                     }
                     if (this.ultActiveTimer <= 0 && this === player) updateUI();
                 }
+
+                if (this.isRemote && !this.isDeadProcessed) {
+                    if (this.targetX !== undefined && !Number.isNaN(this.targetX)) this.x += (this.targetX - this.x) * 0.2;
+                    if (this.targetY !== undefined && !Number.isNaN(this.targetY)) this.y += (this.targetY - this.y) * 0.2;
+                    return; 
+                }
+                
+                let speedMult = 1.0; let coolMult = 1.0;
+                if (this.realm && this.heroType === 'triangle' && this.realm.ninja === this) {
+                    this.hp = Math.min(this.maxHp, this.hp + 15 * (dt/1000)); speedMult = 1.3; coolMult = 0.5;
+                }
+                if (this.heroType === 'square' && this.ultActiveTimer > 0) coolMult = 0.5;
+
+                let currentBaseSpeed = (this.baseSpeed + (this.buffStacks * 0.08)) * speedMult;
+                this.attackCooldown = Math.max(100, (this.baseCooldown - (this.buffStacks * 10))) * coolMult;
+                if (this.slowTimer > 0) { this.slowTimer -= dt; this.speed = currentBaseSpeed * 0.5; } else { this.speed = currentBaseSpeed; }
+
+                if (!this.isBot && this.hp > 0 && this.ultGauge < 100) {
+                    this.ultGauge = Math.min(100, this.ultGauge + (2.5 * dt / 1000));
+                    if (Math.floor(this.ultGauge) !== Math.floor(this.ultGauge - (2.5 * dt / 1000))) updateUI();
+                }
+
+                if (this.vx !== 0 || this.vy !== 0) this.facingAngle = Math.atan2(this.vy, this.vx);
 
                 if (this.isBot && this.hp > 0 && !this.isDeadProcessed) {
                     let target = player; 
@@ -1085,19 +1141,32 @@
                     if (aimingItem === 'ult_ninja') {
                         let target = null; let minDist = 400;
                         for(let b of others) { if(b && b.hp > 0 && Math.hypot(b.x - twX, b.y - twY) < minDist) { target = b; minDist = Math.hypot(b.x - twX, b.y - twY); } }
-                        if(target) { activeRealms.push(new Realm(player, target)); player.ultGauge = 0; aimingItem = null; showAnnouncement("차원의 결계 전개!"); updateUI(); }
+                        if(target) { 
+                            activeRealms.push(new Realm(player, target)); player.ultGauge = 0; aimingItem = null; showAnnouncement("차원의 결계 전개!"); updateUI(); 
+                            if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/skills`).push({ uid: myUid, type: 'ult_ninja', targetName: target.name });
+                        }
                         return;
                     }
                     else if (aimingItem === 'ult_hexagon') {
-                        if (Math.hypot(twX - player.x, twY - player.y) <= 600) { player.x = twX; player.y = twY; player.ultActiveTimer = 3000; player.ultGauge = 0; aimingItem = null; showAnnouncement("회전 베기!"); updateUI(); }
+                        if (Math.hypot(twX - player.x, twY - player.y) <= 600) { 
+                            player.x = twX; player.y = twY; player.ultActiveTimer = 3000; player.ultGauge = 0; aimingItem = null; showAnnouncement("회전 베기!"); updateUI(); 
+                            if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/skills`).push({ uid: myUid, type: 'ult_hexagon', twX, twY });
+                        }
                         return;
                     }
 
                     let angle = Math.atan2(twY - player.y, twX - player.x); let dist = Math.min(Math.hypot(twX - player.x, twY - player.y), aimingItem === 'grenade' ? 600 : 150); 
                     let finalX = player.x + Math.cos(angle) * dist; let finalY = player.y + Math.sin(angle) * dist;
 
-                    if (aimingItem === 'grenade') { player.inventory.grenade--; explosives.push(new Explosive('grenade', player.x, player.y, player, finalX, finalY)); } 
-                    else if (aimingItem === 'mine') { player.inventory.mine--; explosives.push(new Explosive('mine', finalX, finalY, player)); }
+                    // 🚨 핵심 교정 3-2: 내가 던진 수류탄과 지뢰를 다른 플레이어도 똑같이 볼 수 있도록 서버에 전송
+                    if (aimingItem === 'grenade') { 
+                        player.inventory.grenade--; explosives.push(new Explosive('grenade', player.x, player.y, player, finalX, finalY)); 
+                        if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/skills`).push({ uid: myUid, type: 'grenade', finalX, finalY });
+                    } 
+                    else if (aimingItem === 'mine') { 
+                        player.inventory.mine--; explosives.push(new Explosive('mine', finalX, finalY, player)); 
+                        if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/skills`).push({ uid: myUid, type: 'mine', finalX, finalY });
+                    }
                     aimingItem = null; updateUI(); return; 
                 }
 
@@ -1138,6 +1207,8 @@
                 if (player.heroType === 'circle' || player.heroType === 'square') {
                     player.ultGauge = 0; player.ultActiveTimer = player.heroType === 'square' ? 5000 : 3000;
                     showAnnouncement(player.heroType === 'circle' ? "💦 물줄기 난사!" : "🔥 광폭화 및 치유 오라!"); updateUI();
+                    // 🚨 핵심 교정 3-3: 물줄기와 치유 오라를 모두에게 동기화
+                    if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/skills`).push({ uid: myUid, type: 'ult_activate' });
                 } 
                 else if (player.heroType === 'triangle') toggleAim('ult_ninja');
                 else if (player.heroType === 'hexagon') toggleAim('ult_hexagon');
@@ -1151,6 +1222,8 @@
                 player.x += Math.cos(angle) * 300; player.y += Math.sin(angle) * 300;
                 player.x = Math.max(player.radius, Math.min(MAP_WIDTH - player.radius, player.x)); player.y = Math.max(player.radius, Math.min(MAP_HEIGHT - player.radius, player.y));
                 player.flashCooldown = 30000; showAnnouncement("⚡ 점멸!"); updateUI();
+                // 🚨 핵심 교정 3-4: 점멸 사용을 모두에게 동기화
+                if (!isSinglePlayer && currentRoomId) db.ref(`rooms/${currentRoomId}/events/skills`).push({ uid: myUid, type: 'flash', x: player.x, y: player.y });
             }
         }
 
@@ -1233,7 +1306,7 @@
             currentState = GAME_STATE.GAME_OVER; const modal = document.getElementById('modal');
             modal.innerText = msg; modal.style.display = 'block';
             if (animationFrameId) cancelAnimationFrame(animationFrameId); 
-            setTimeout(() => { modal.style.display = 'none'; document.getElementById('game-container').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; }, 5000);
+            setTimeout(() => { modal.style.display = 'none'; document.getElementById('game-container').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; leaveRoom(); }, 5000);
         }
 
         function handleDeath(deadPlayer, killer) {
@@ -1328,7 +1401,6 @@
         function gameLoop(timestamp) {
             if (currentState !== GAME_STATE.PLAYING) return;
             
-            // 핵심 교정 1: 방치 시 시간 폭주 스로틀링 방지 캡 적용 (최대 100ms)
             let dt = timestamp - lastTime; 
             lastTime = timestamp;
             if (dt > 100) dt = 100; 
@@ -1338,7 +1410,6 @@
                 if (syncTimer <= 0) {
                     syncTimer = 100;
                     if (player && currentRoomId) {
-                        // 핵심 교정 2: 죽어있을 때도 상태와 HP=0을 계속 전송하여 누락 방지 및 부활 즉각 동기화
                         db.ref(`rooms/${currentRoomId}/players/${myUid}`).update({ 
                             x: player.isDeadProcessed ? -1000 : Math.round(player.x), 
                             y: player.isDeadProcessed ? -1000 : Math.round(player.y), 
