@@ -69,10 +69,8 @@
         .quiz-option { background: #3b82f6; border: 2px solid #2563eb; color: white; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 20px; cursor: pointer; transition: background 0.2s; }
         .quiz-option:hover { background: #2563eb; }
 
-        /* 시작 카운트다운 */
         #countdown-overlay { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 250; color: #fbbf24; font-size: 120px; font-weight: bold; justify-content: center; align-items: center; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
 
-        /* Menus */
         .fullscreen-menu { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; }
         .hidden-menu { display: none !important; }
         
@@ -108,7 +106,6 @@
         .status-ready { color: #48bb78; font-weight: bold; }
         .status-wait { color: #a0aec0; }
 
-        /* 기기별 화면 최적화 (모바일 지원) */
         @media (max-width: 768px) {
             #skill-zone { transform: scale(0.8); transform-origin: bottom right; bottom: 10px; right: 10px; gap: 10px; }
             #joystick-zone { transform: scale(0.8); transform-origin: bottom left; bottom: 10px; left: 10px; }
@@ -194,7 +191,6 @@
         <p id="start-warning" class="text-red-400 mt-2 font-bold h-6"></p>
     </div>
 
-    <!-- UI Overlays -->
     <div id="modal">메시지</div>
     <div id="announcement">📦 보급이 곧 투하됩니다!</div>
     <div id="countdown-overlay">3</div>
@@ -280,13 +276,13 @@
 
         const GAME_STATE = { MENU: 0, PLAYING: 1, GAME_OVER: 2 };
         let currentState = GAME_STATE.MENU;
-        let isGameActive = false; // 카운트다운 완료 후 true
+        let isGameActive = false; 
         
         let myUid = "uid_" + Math.random().toString(36).substr(2, 9);
         let currentRoomId = null;
         let isHost = false, isReady = false, myTeam = 'blue', isSinglePlayer = true;
         let roomListener = null;
-        let animationFrameId = null; // 루프 관리용 변수
+        let animationFrameId = null; 
 
         const MAP_WIDTH = 3200;
         const MAP_HEIGHT = 2400;
@@ -332,7 +328,6 @@
             modalTimeout = setTimeout(() => { modal.style.display = 'none'; }, 2500);
         }
 
-        // --- 수정사항 1: 메뉴 표시 시 강제 상태 초기화 (방장 접속 불가 버그 원인 해결) ---
         function showMenu(menuId) {
             currentState = GAME_STATE.MENU; 
             document.querySelectorAll('.fullscreen-menu').forEach(el => el.classList.add('hidden-menu'));
@@ -386,16 +381,31 @@
                 
                 if(data.status === 'playing' && currentState === GAME_STATE.MENU) enterIngame(data.mode, data.players);
                 
+                // 멀티플레이어 동기화 수신 로직 (부활 누락 버그 해결)
                 if(currentState === GAME_STATE.PLAYING && data.players) {
                     for(let uid in data.players) {
                         if(uid === myUid) continue; 
                         let pData = data.players[uid]; let p = remotePlayers[uid];
-                        if(p && !p.isDeadProcessed) { 
-                            if (pData.x !== undefined) p.targetX = pData.x;
-                            if (pData.y !== undefined) p.targetY = pData.y;
-                            if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
-                            if (pData.hp !== undefined) p.hp = pData.hp;
-                            // 추가: 시각적 완벽 동기화를 위해 타이머도 연동
+                        
+                        if(p) { 
+                            // 1. 데이터베이스에 HP가 살아있으면 내 클라이언트에서도 즉시 부활 처리! (투명화 버그 해결)
+                            if (pData.hp !== undefined) {
+                                p.hp = pData.hp;
+                                p.isDeadProcessed = (p.hp <= 0); // HP 기반으로 생사 상태를 완벽히 동기화
+                            }
+
+                            // 2. 살아있는 경우에만 위치 업데이트 적용
+                            if (!p.isDeadProcessed) {
+                                if (pData.x !== undefined) p.targetX = pData.x;
+                                if (pData.y !== undefined) p.targetY = pData.y;
+                                if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
+                            } else {
+                                // 죽은 상태면 화면에서 확실히 치움
+                                p.targetX = -1000;
+                                p.x = -1000;
+                            }
+
+                            // 3. 궁극기, 버프, 무적 타이머 동기화
                             if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
                             if (pData.buff !== undefined) p.buffStacks = pData.buff;
                             if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
@@ -453,7 +463,6 @@
             showMenu('multiplayer-lobby');
         }
 
-        // --- 수정사항 2: 원자적 데이터 업데이트로 방장 멀티 시작 동기화 보장 ---
         function startMultiplayer() { 
             if(isHost && currentRoomId) {
                 db.ref('rooms/' + currentRoomId).update({ 
@@ -516,7 +525,6 @@
             if (isSinglePlayer) startNewMission();
             else { 
                 setupMultiplayerListeners(); 
-                // 수정: 레이스 컨디션 완벽 차단을 위해 여유 있게 전송
                 if (isHost) setTimeout(() => triggerNewMissionSync(), 500); 
             }
 
@@ -562,13 +570,15 @@
                 document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
 
                 if (data.victimUid === myUid) {
-                    showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
-                    player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
-                    if(player.realm) { player.realm.active = false; player.realm = null; }
-                    setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
+                    if(!player.isDeadProcessed) { // 중복 실행 방지
+                        showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
+                        player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
+                        if(player.realm) { player.realm.active = false; player.realm = null; }
+                        setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
+                    }
                 } else {
                     let deadP = remotePlayers[data.victimUid] || others.find(b => b.name === data.victimName);
-                    if (deadP) {
+                    if (deadP && !deadP.isDeadProcessed) { // 중복 실행 방지
                         deadP.hp = 0; deadP.x = -1000; deadP.targetX = -1000; deadP.isDeadProcessed = true;
                         if(deadP.realm) { deadP.realm.active = false; deadP.realm = null; }
                         if (isHost && deadP.isBot) setTimeout(() => { deadP.spawn(); }, 3000);
@@ -878,13 +888,13 @@
                 this.targetX = this.x; this.targetY = this.y;
             }
             update(dt) {
-                // --- 수정사항 3: 리모트 플레이어들의 무적/쿨타임이 깎이지 않던 버그 수정 ---
+                // 리모트 플레이어(적)도 무적/궁극기 타이머가 정상적으로 깎이도록 처리
                 if(this.invincibleTimer > 0) this.invincibleTimer -= dt;
                 if(this.flashCooldown > 0) this.flashCooldown -= dt;
 
                 if (this.isRemote && !this.isDeadProcessed) {
-                    if (this.targetX !== undefined) this.x += (this.targetX - this.x) * 0.2;
-                    if (this.targetY !== undefined) this.y += (this.targetY - this.y) * 0.2;
+                    if (this.targetX !== undefined && !Number.isNaN(this.targetX)) this.x += (this.targetX - this.x) * 0.2;
+                    if (this.targetY !== undefined && !Number.isNaN(this.targetY)) this.y += (this.targetY - this.y) * 0.2;
                     if (this.ultActiveTimer > 0) this.ultActiveTimer -= dt;
                     return; 
                 }
@@ -1018,7 +1028,6 @@
 
                 ctx.restore();
 
-                // 닉네임 렌더링 (최대 4글자)
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Jua'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                 ctx.fillText(this.name, this.x, this.y);
 
@@ -1318,17 +1327,21 @@
 
         function gameLoop(timestamp) {
             if (currentState !== GAME_STATE.PLAYING) return;
-            const dt = timestamp - lastTime; lastTime = timestamp;
+            
+            // 핵심 교정 1: 방치 시 시간 폭주 스로틀링 방지 캡 적용 (최대 100ms)
+            let dt = timestamp - lastTime; 
+            lastTime = timestamp;
+            if (dt > 100) dt = 100; 
 
             if (!isSinglePlayer && isGameActive) {
                 syncTimer -= dt;
                 if (syncTimer <= 0) {
                     syncTimer = 100;
-                    if (player && player.hp > 0 && !player.isDeadProcessed && currentRoomId) {
-                        // 수정사항 4: 다른 플레이어들에게도 내 타이머 값들을 페이로드로 전송하여 완벽한 시각 동기화
+                    if (player && currentRoomId) {
+                        // 핵심 교정 2: 죽어있을 때도 상태와 HP=0을 계속 전송하여 누락 방지 및 부활 즉각 동기화
                         db.ref(`rooms/${currentRoomId}/players/${myUid}`).update({ 
-                            x: Math.round(player.x), 
-                            y: Math.round(player.y), 
+                            x: player.isDeadProcessed ? -1000 : Math.round(player.x), 
+                            y: player.isDeadProcessed ? -1000 : Math.round(player.y), 
                             facingAngle: parseFloat(player.facingAngle.toFixed(2)), 
                             hp: Math.round(player.hp),
                             ult: Math.max(0, Math.round(player.ultActiveTimer)),
