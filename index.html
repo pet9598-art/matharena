@@ -323,7 +323,6 @@
             { type: 'multiple', target: 7, text: "7의 배수를 찾아라!" }
         ];
 
-        // --- 누락되었던 showModal 함수 추가 ---
         let modalTimeout = null;
         function showModal(msg) {
             const modal = document.getElementById('modal');
@@ -332,9 +331,10 @@
             if (modalTimeout) clearTimeout(modalTimeout);
             modalTimeout = setTimeout(() => { modal.style.display = 'none'; }, 2500);
         }
-        // ------------------------------------
 
+        // --- 수정사항 1: 메뉴 표시 시 강제 상태 초기화 (방장 접속 불가 버그 원인 해결) ---
         function showMenu(menuId) {
+            currentState = GAME_STATE.MENU; 
             document.querySelectorAll('.fullscreen-menu').forEach(el => el.classList.add('hidden-menu'));
             if(menuId) document.getElementById(menuId).classList.remove('hidden-menu');
         }
@@ -395,6 +395,10 @@
                             if (pData.y !== undefined) p.targetY = pData.y;
                             if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
                             if (pData.hp !== undefined) p.hp = pData.hp;
+                            // 추가: 시각적 완벽 동기화를 위해 타이머도 연동
+                            if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
+                            if (pData.buff !== undefined) p.buffStacks = pData.buff;
+                            if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
                         }
                     }
                 }
@@ -449,10 +453,13 @@
             showMenu('multiplayer-lobby');
         }
 
+        // --- 수정사항 2: 원자적 데이터 업데이트로 방장 멀티 시작 동기화 보장 ---
         function startMultiplayer() { 
             if(isHost && currentRoomId) {
-                db.ref(`rooms/${currentRoomId}/events`).remove();
-                db.ref('rooms/' + currentRoomId).update({ status: 'playing' }); 
+                db.ref('rooms/' + currentRoomId).update({ 
+                    status: 'playing',
+                    events: null
+                }); 
             }
         }
 
@@ -493,9 +500,9 @@
 
             initMap(); projectiles = []; meleeSlashes = []; orbs = []; supplyCrates = []; explosives = []; heartPacks = []; activeRealms = [];
             stats = { blue: { kills: 0, deaths: 0 }, red: { kills: 0, deaths: 0 } }; others = []; remotePlayers = {}; 
-            isGameActive = false; // 카운트다운 전까지 비활성화
+            isGameActive = false;
 
-            for (const [uid, pData] of Object.entries(playersData)) {
+            for (const [uid, pData] of Object.entries(playersData || {})) {
                 if (uid === myUid) { player = new Player(pData.team, false, pData.hero, pData.name || '유저'); myTeam = pData.team; } 
                 else { 
                     let newP = new Player(pData.team, pData.isBot || false, pData.hero, pData.name);
@@ -507,16 +514,17 @@
             updateUI(); setupControls(); 
             
             if (isSinglePlayer) startNewMission();
-            else { setupMultiplayerListeners(); if (isHost) triggerNewMissionSync(); }
+            else { 
+                setupMultiplayerListeners(); 
+                // 수정: 레이스 컨디션 완벽 차단을 위해 여유 있게 전송
+                if (isHost) setTimeout(() => triggerNewMissionSync(), 500); 
+            }
 
-            // 3, 2, 1 카운트다운 시작
-            startCountdown(() => {
-                isGameActive = true; // 카운트다운 종료 후 조작 활성화
-            });
+            startCountdown(() => { isGameActive = true; });
 
             currentState = GAME_STATE.PLAYING; lastTime = performance.now(); syncTimer = 0; 
             
-            if (animationFrameId) cancelAnimationFrame(animationFrameId); // 루프 중복 실행 방지
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); 
             animationFrameId = requestAnimationFrame(gameLoop);
         }
 
@@ -870,14 +878,16 @@
                 this.targetX = this.x; this.targetY = this.y;
             }
             update(dt) {
+                // --- 수정사항 3: 리모트 플레이어들의 무적/쿨타임이 깎이지 않던 버그 수정 ---
+                if(this.invincibleTimer > 0) this.invincibleTimer -= dt;
+                if(this.flashCooldown > 0) this.flashCooldown -= dt;
+
                 if (this.isRemote && !this.isDeadProcessed) {
                     if (this.targetX !== undefined) this.x += (this.targetX - this.x) * 0.2;
                     if (this.targetY !== undefined) this.y += (this.targetY - this.y) * 0.2;
+                    if (this.ultActiveTimer > 0) this.ultActiveTimer -= dt;
                     return; 
                 }
-
-                if(this.invincibleTimer > 0) this.invincibleTimer -= dt;
-                if(this.flashCooldown > 0) this.flashCooldown -= dt;
                 
                 let speedMult = 1.0; let coolMult = 1.0;
                 if (this.realm && this.heroType === 'triangle' && this.realm.ninja === this) {
@@ -1046,7 +1056,7 @@
 
         let isControlsSetup = false;
         function setupControls() {
-            if (isControlsSetup) return; // 컨트롤이 이미 셋업되었다면 무시
+            if (isControlsSetup) return; 
             isControlsSetup = true;
 
             window.addEventListener('keydown', (e) => { 
@@ -1213,7 +1223,7 @@
         function endGame(msg) {
             currentState = GAME_STATE.GAME_OVER; const modal = document.getElementById('modal');
             modal.innerText = msg; modal.style.display = 'block';
-            if (animationFrameId) cancelAnimationFrame(animationFrameId); // 루프 종료
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); 
             setTimeout(() => { modal.style.display = 'none'; document.getElementById('game-container').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; }, 5000);
         }
 
@@ -1315,7 +1325,16 @@
                 if (syncTimer <= 0) {
                     syncTimer = 100;
                     if (player && player.hp > 0 && !player.isDeadProcessed && currentRoomId) {
-                        db.ref(`rooms/${currentRoomId}/players/${myUid}`).update({ x: player.x, y: player.y, facingAngle: player.facingAngle, hp: player.hp });
+                        // 수정사항 4: 다른 플레이어들에게도 내 타이머 값들을 페이로드로 전송하여 완벽한 시각 동기화
+                        db.ref(`rooms/${currentRoomId}/players/${myUid}`).update({ 
+                            x: Math.round(player.x), 
+                            y: Math.round(player.y), 
+                            facingAngle: parseFloat(player.facingAngle.toFixed(2)), 
+                            hp: Math.round(player.hp),
+                            ult: Math.max(0, Math.round(player.ultActiveTimer)),
+                            buff: player.buffStacks,
+                            inv: Math.max(0, Math.round(player.invincibleTimer))
+                        });
                     }
                 }
             }
