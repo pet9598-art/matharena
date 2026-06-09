@@ -16,8 +16,22 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #374151; font-family: 'Jua', sans-serif; touch-action: none; user-select: none; }
-        #game-container { position: relative; width: 100vw; height: 100vh; display: none; }
+        /* 🚨 모바일 주소창 대응 및 스크롤 완전 차단 */
+        html, body { 
+            position: fixed; 
+            width: 100%; 
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            background-color: #374151; 
+            font-family: 'Jua', sans-serif; 
+            touch-action: none; 
+            overscroll-behavior: none; 
+            user-select: none; 
+            -webkit-user-select: none;
+        }
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
 
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; padding: 20px; z-index: 10; }
@@ -64,16 +78,16 @@
 
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(237, 137, 54, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(237, 137, 54, 0); } 100% { box-shadow: 0 0 0 0 rgba(237, 137, 54, 0); } }
 
-        #quiz-modal-container { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 200; pointer-events: auto; justify-content: center; align-items: center; }
+        #quiz-modal-container { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 200; pointer-events: auto; justify-content: center; align-items: center; }
         #quiz-box { background: #1f2937; border: 4px solid #fbbf24; border-radius: 16px; padding: 30px; width: 90%; max-width: 500px; text-align: center; color: white; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
         .quiz-option { background: #3b82f6; border: 2px solid #2563eb; color: white; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 20px; cursor: pointer; transition: background 0.2s; }
         .quiz-option:hover { background: #2563eb; }
 
         /* 시작 카운트다운 */
-        #countdown-overlay { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 250; color: #fbbf24; font-size: 120px; font-weight: bold; justify-content: center; align-items: center; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        #countdown-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 250; color: #fbbf24; font-size: 120px; font-weight: bold; justify-content: center; align-items: center; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
 
         /* Menus */
-        .fullscreen-menu { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; }
+        .fullscreen-menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; }
         .hidden-menu { display: none !important; }
         
         .mode-selection { display: flex; gap: 30px; margin-bottom: 20px; background: rgba(0,0,0,0.3); padding: 15px 30px; border-radius: 12px;}
@@ -193,6 +207,7 @@
         <p id="start-warning" class="text-red-400 mt-2 font-bold h-6"></p>
     </div>
 
+    <!-- UI Overlays -->
     <div id="modal">메시지</div>
     <div id="announcement">📦 보급이 곧 투하됩니다!</div>
     <div id="countdown-overlay">3</div>
@@ -273,8 +288,25 @@
         const missionBanner = document.getElementById('mission-banner');
 
         let viewWidth, viewHeight;
-        function resize() { viewWidth = window.innerWidth; viewHeight = window.innerHeight; canvas.width = viewWidth; canvas.height = viewHeight; }
-        window.addEventListener('resize', resize); resize();
+        
+        // 🚨 주소창 대응 모바일 뷰포트 최적화 함수
+        function resize() { 
+            viewWidth = window.innerWidth; 
+            viewHeight = window.innerHeight; 
+            canvas.width = viewWidth; 
+            canvas.height = viewHeight; 
+            
+            // 모바일 주소창 높이에 맞게 강제로 컨테이너 크기 할당 (화면 잘림 및 조이스틱 숨김 방지)
+            document.body.style.height = viewHeight + 'px';
+            const gc = document.getElementById('game-container');
+            if(gc) gc.style.height = viewHeight + 'px';
+            document.querySelectorAll('.fullscreen-menu').forEach(el => {
+                el.style.height = viewHeight + 'px';
+            });
+        }
+        window.addEventListener('resize', resize);
+        window.addEventListener('orientationchange', () => setTimeout(resize, 100)); // 화면 회전 대응
+        resize();
 
         const GAME_STATE = { MENU: 0, PLAYING: 1, GAME_OVER: 2 };
         let currentState = GAME_STATE.MENU;
@@ -306,11 +338,10 @@
         let mouseX = 0, mouseY = 0, joystickManager = null, isJoystickActive = false;
         const keys = {};
 
-        // 🚨 수정사항: 세모 닌자(triangle) 전폭 버프
         const HEROES = {
             circle: { name: '원형 슈터', shape: 'circle', baseSpeed: 5, maxHp: 100, cooldown: 350, desc: '원거리 사격, 3초 물줄기 연사' },
             square: { name: '네모 탱커', shape: 'square', baseSpeed: 4, maxHp: 150, cooldown: 600, desc: '주먹질(흡혈), 5초 광폭화 및 힐링오라' },
-            triangle: { name: '세모 닌자', shape: 'triangle', baseSpeed: 6.0, maxHp: 105, cooldown: 550, desc: '표창, 5초간 적을 결계에 가둠' }, // 버프 반영
+            triangle: { name: '세모 닌자', shape: 'triangle', baseSpeed: 6.0, maxHp: 105, cooldown: 550, desc: '표창, 5초간 적을 결계에 가둠' },
             hexagon: { name: '육각 검사', shape: 'hexagon', baseSpeed: 6.0, maxHp: 120, cooldown: 500, desc: '빠른 이속, 3초 순간이동 회전베기' }
         };
         let selectedHeroType = 'circle';
@@ -331,7 +362,6 @@
             modalTimeout = setTimeout(() => { modal.style.display = 'none'; }, 2500);
         }
 
-        // --- STREAMING_CHUNK:Lobby & Multi-player Setup ---
         function showMenu(menuId) {
             currentState = GAME_STATE.MENU; 
             document.querySelectorAll('.fullscreen-menu').forEach(el => el.classList.add('hidden-menu'));
@@ -379,31 +409,66 @@
             document.getElementById('display-room-id').innerText = roomId; showMenu('multiplayer-room');
             document.querySelectorAll('input[name="mpGameMode"]').forEach(el => el.disabled = !isHost);
             
-            roomListener = db.ref('rooms/' + roomId).on('value', snapshot => {
-                const data = snapshot.val();
-                if(!data) { leaveRoom(); return showModal("방이 사라졌습니다."); }
+            db.ref(`rooms/${roomId}/status`).on('value', snap => {
+                const status = snap.val();
+                if(!status) { leaveRoom(); return showModal("방이 사라졌습니다."); }
+                if(status === 'playing' && currentState === GAME_STATE.MENU) {
+                    db.ref(`rooms/${roomId}`).once('value').then(s => {
+                        let data = s.val();
+                        enterIngame(data.mode, data.players);
+                    });
+                }
+            });
+
+            db.ref(`rooms/${roomId}/mode`).on('value', snap => {
+                if(currentState === GAME_STATE.MENU && snap.val()) {
+                    document.querySelector(`input[name="mpGameMode"][value="${snap.val()}"]`).checked = true;
+                }
+            });
+
+            db.ref(`rooms/${roomId}/players`).on('value', snap => {
+                const playersData = snap.val();
+                if(!playersData) return;
                 
-                if(data.status === 'playing' && currentState === GAME_STATE.MENU) enterIngame(data.mode, data.players);
-                
-                if(currentState === GAME_STATE.PLAYING && data.players) {
-                    for(let uid in data.players) {
+                if (currentState === GAME_STATE.MENU) {
+                    updateRoomUI(playersData);
+                } else if (currentState === GAME_STATE.PLAYING) {
+                    for(let uid in playersData) {
                         if(uid === myUid) continue; 
-                        let pData = data.players[uid]; let p = remotePlayers[uid];
-                        if(p && !p.isDeadProcessed) { 
-                            if (pData.x !== undefined) p.targetX = pData.x;
-                            if (pData.y !== undefined) p.targetY = pData.y;
-                            if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
-                            if (pData.hp !== undefined) p.hp = pData.hp;
-                            if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
-                            if (pData.buff !== undefined) p.buffStacks = pData.buff;
-                            if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
+                        let pData = playersData[uid]; let p = remotePlayers[uid];
+                        
+                        if(p) { 
+                            // 🚨 사망 및 부활 시 투명화 버그 완전 해결 부분
+                            // HP 정보를 가장 먼저 읽어들여 죽음 상태(isDeadProcessed)를 결정합니다.
+                            if (pData.hp !== undefined) {
+                                p.hp = pData.hp;
+                                if (p.hp > 0 && p.isDeadProcessed) {
+                                    // 사망 처리되어있던 플레이어의 HP가 찼다 => 부활 감지
+                                    p.isDeadProcessed = false;
+                                    // 부활 즉시 걸어오지 않고 텔레포트 하도록 x, y 강제 할당
+                                    p.x = pData.x !== undefined ? pData.x : p.x;
+                                    p.y = pData.y !== undefined ? pData.y : p.y;
+                                } else if (p.hp <= 0) {
+                                    p.isDeadProcessed = true;
+                                    p.x = -1000;
+                                    p.y = -1000;
+                                }
+                            }
+
+                            // 플레이어가 살아있다고 판정될 때만 좌표 및 상태 동기화 진행
+                            if (!p.isDeadProcessed) {
+                                if (pData.x !== undefined) p.targetX = pData.x;
+                                if (pData.y !== undefined) p.targetY = pData.y;
+                                if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
+                                if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
+                                if (pData.buff !== undefined) p.buffStacks = pData.buff;
+                                if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
+                            } else {
+                                p.targetX = -1000;
+                                p.targetY = -1000;
+                            }
                         }
                     }
-                }
-
-                if(currentState === GAME_STATE.MENU) {
-                    if(data.mode) document.querySelector(`input[name="mpGameMode"][value="${data.mode}"]`).checked = true;
-                    updateRoomUI(data.players || {});
                 }
             });
         }
@@ -449,7 +514,6 @@
         function leaveRoom() {
             if(currentRoomId) { 
                 db.ref(`rooms/${currentRoomId}/players/${myUid}`).remove(); 
-                
                 db.ref(`rooms/${currentRoomId}/status`).off();
                 db.ref(`rooms/${currentRoomId}/mode`).off();
                 db.ref(`rooms/${currentRoomId}/players`).off();
@@ -459,7 +523,6 @@
                 db.ref(`rooms/${currentRoomId}/events/supplyCrates`).off();
                 db.ref(`rooms/${currentRoomId}/events/mission`).off();
                 db.ref(`rooms/${currentRoomId}/events/orbEaten`).off();
-                
                 currentRoomId = null; isHost = false; 
             }
             showMenu('multiplayer-lobby');
@@ -503,7 +566,6 @@
             db.ref(`rooms/${currentRoomId}/events/mission`).set({ index: idx, orbs: newOrbs });
         }
 
-        // --- STREAMING_CHUNK:Game Engine Setup ---
         function enterIngame(mode, playersData) {
             selectedGameMode = mode; showMenu(null); document.getElementById('game-container').style.display = 'block';
 
@@ -537,6 +599,7 @@
             
             if (animationFrameId) cancelAnimationFrame(animationFrameId); 
             animationFrameId = requestAnimationFrame(gameLoop);
+            resize(); // 게임 컨테이너 보일 때 강제 리사이즈 한 번 더
         }
 
         function startCountdown(callback) {
@@ -572,8 +635,8 @@
                 document.getElementById('score-blue-kill').innerText = stats.blue.kills; document.getElementById('score-blue-death').innerText = stats.blue.deaths;
                 document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
 
-                // 🚨 수정사항: 이중 보호 타이머 (내 캐릭터와 다른 캐릭터의 확실한 리스폰 동기화)
                 if (data.victimUid === myUid) {
+                    // 클라이언트에서 킬 처리 완료 안됐을 경우 강제 처리
                     if(!player.isDeadProcessed) { 
                         showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
                         player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
@@ -647,7 +710,6 @@
             setTimeout(() => { if(container.contains(el)) container.removeChild(el); }, 4500);
         }
 
-        // --- STREAMING_CHUNK:Game Classes (Objects) ---
         class DominationPoint {
             constructor() { this.x = 1600; this.y = 1200; this.radius = 250; this.owner = null; this.capturingTeam = null; this.captureProgress = 0; this.maxProgress = 3; }
             update(dt) {
@@ -778,7 +840,6 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Game Combat System ---
         class Explosive {
             constructor(type, x, y, owner, targetX=0, targetY=0) {
                 this.type = type; this.x = x; this.y = y; this.owner = owner; this.active = true;
@@ -807,14 +868,7 @@
                                 if(Math.hypot(this.x - t.x, this.y - t.y) < this.radius + t.radius) {
                                     let dmg = 40; if(t.heroType === 'hexagon' && t.ultActiveTimer > 0) dmg *= 0.8;
                                     t.hp -= dmg; this.damagedTargets.push(t); 
-                                    if(t.hp <= 0 && !t.isDeadProcessed) { 
-                                        t.isDeadProcessed = true; 
-                                        handleDeath(t, this.owner); 
-                                        // 🚨 원형 슈터 제약: 궁극기 도중 1킬 시 궁극기 즉시 취소
-                                        if (this.owner.heroType === 'circle' && this.owner.ultActiveTimer > 0) {
-                                            this.owner.ultActiveTimer = 0; if(this.owner === player) updateUI();
-                                        }
-                                    }
+                                    if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this.owner); }
                                 }
                             }
                         }
@@ -854,14 +908,8 @@
                                     this.owner.hp = Math.min(this.owner.maxHp, this.owner.hp + lifesteal);
                                 }
 
-                                // 🚨 궁극기 충전 제약: 궁극기 시전 중에는 게이지 상승 금지
-                                if (!this.owner.isBot && !this.owner.isRemote && this.owner.ultActiveTimer <= 0) { 
-                                    this.owner.ultGauge = Math.min(100, this.owner.ultGauge + 5); updateUI(); 
-                                }
-                                if(t.hp <= 0 && !t.isDeadProcessed) { 
-                                    t.isDeadProcessed = true; 
-                                    handleDeath(t, this.owner); 
-                                }
+                                if (!this.owner.isBot && !this.owner.isRemote && this.owner.ultActiveTimer <= 0) { this.owner.ultGauge = Math.min(100, this.owner.ultGauge + 5); updateUI(); }
+                                if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, this.owner); }
                             }
                         }
                     }
@@ -879,11 +927,10 @@
 
         class Projectile {
             constructor(x, y, angle, color, owner) {
-                this.x = x; this.y = y; this.radius = 6; 
-                this.speed = (owner.heroType === 'triangle') ? 13 : 15; // 🚨 세모 닌자 투사체 속도 상향
+                this.x = x; this.y = y; this.radius = 6; this.speed = (owner.heroType === 'triangle') ? 13 : 15;
                 this.vx = Math.cos(angle) * this.speed; this.vy = Math.sin(angle) * this.speed;
                 this.color = color; this.owner = owner; 
-                this.damage = (owner.heroType === 'triangle') ? 12 : 15; // 🚨 세모 닌자 데미지 상향
+                this.damage = (owner.heroType === 'triangle') ? 12 : 15; 
                 this.active = true; this.distanceTraveled = 0;
             }
             update() {
@@ -932,31 +979,6 @@
                 if(this.invincibleTimer > 0) this.invincibleTimer -= dt;
                 if(this.flashCooldown > 0) this.flashCooldown -= dt;
 
-                if (this.isRemote && !this.isDeadProcessed) {
-                    if (this.targetX !== undefined && !Number.isNaN(this.targetX)) this.x += (this.targetX - this.x) * 0.2;
-                    if (this.targetY !== undefined && !Number.isNaN(this.targetY)) this.y += (this.targetY - this.y) * 0.2;
-                    if (this.ultActiveTimer > 0) this.ultActiveTimer -= dt;
-                    return; 
-                }
-                
-                let speedMult = 1.0; let coolMult = 1.0;
-                if (this.realm && this.heroType === 'triangle' && this.realm.ninja === this) {
-                    this.hp = Math.min(this.maxHp, this.hp + 15 * (dt/1000)); speedMult = 1.3; coolMult = 0.5;
-                }
-                if (this.heroType === 'square' && this.ultActiveTimer > 0) coolMult = 0.5;
-
-                let currentBaseSpeed = (this.baseSpeed + (this.buffStacks * 0.08)) * speedMult;
-                this.attackCooldown = Math.max(100, (this.baseCooldown - (this.buffStacks * 10))) * coolMult;
-                if (this.slowTimer > 0) { this.slowTimer -= dt; this.speed = currentBaseSpeed * 0.5; } else { this.speed = currentBaseSpeed; }
-
-                // 🚨 궁극기 충전 제약: 궁극기 시전 중(ultActiveTimer > 0)에는 자연 충전 금지
-                if (!this.isBot && this.hp > 0 && this.ultGauge < 100 && this.ultActiveTimer <= 0) {
-                    this.ultGauge = Math.min(100, this.ultGauge + (2.5 * dt / 1000));
-                    if (Math.floor(this.ultGauge) !== Math.floor(this.ultGauge - (2.5 * dt / 1000))) updateUI();
-                }
-
-                if (this.vx !== 0 || this.vy !== 0) this.facingAngle = Math.atan2(this.vy, this.vx);
-
                 if (this.ultActiveTimer > 0) {
                     this.ultActiveTimer -= dt;
                     if (this.heroType === 'circle') {
@@ -987,6 +1009,29 @@
                     }
                     if (this.ultActiveTimer <= 0 && this === player) updateUI();
                 }
+
+                if (this.isRemote && !this.isDeadProcessed) {
+                    if (this.targetX !== undefined && !Number.isNaN(this.targetX)) this.x += (this.targetX - this.x) * 0.2;
+                    if (this.targetY !== undefined && !Number.isNaN(this.targetY)) this.y += (this.targetY - this.y) * 0.2;
+                    return; 
+                }
+                
+                let speedMult = 1.0; let coolMult = 1.0;
+                if (this.realm && this.heroType === 'triangle' && this.realm.ninja === this) {
+                    this.hp = Math.min(this.maxHp, this.hp + 15 * (dt/1000)); speedMult = 1.3; coolMult = 0.5;
+                }
+                if (this.heroType === 'square' && this.ultActiveTimer > 0) coolMult = 0.5;
+
+                let currentBaseSpeed = (this.baseSpeed + (this.buffStacks * 0.08)) * speedMult;
+                this.attackCooldown = Math.max(100, (this.baseCooldown - (this.buffStacks * 10))) * coolMult;
+                if (this.slowTimer > 0) { this.slowTimer -= dt; this.speed = currentBaseSpeed * 0.5; } else { this.speed = currentBaseSpeed; }
+
+                if (!this.isBot && this.hp > 0 && this.ultGauge < 100 && this.ultActiveTimer <= 0) {
+                    this.ultGauge = Math.min(100, this.ultGauge + (2.5 * dt / 1000));
+                    if (Math.floor(this.ultGauge) !== Math.floor(this.ultGauge - (2.5 * dt / 1000))) updateUI();
+                }
+
+                if (this.vx !== 0 || this.vy !== 0) this.facingAngle = Math.atan2(this.vy, this.vx);
 
                 if (this.isBot && this.hp > 0 && !this.isDeadProcessed) {
                     let target = player; 
@@ -1094,7 +1139,6 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Game Controls & Logic ---
         function initMap() {
             containers = []; const colors = ['#b91c1c', '#0369a1', '#15803d', '#ea580c']; 
             if (selectedGameMode === 'deathmatch') containers.push(new Container(1400, 1000, 400, 400, colors[1]));
@@ -1306,7 +1350,6 @@
                 
                 if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
                 deadPlayer.hp = 0; deadPlayer.x = -1000; deadPlayer.targetX = -1000; deadPlayer.isDeadProcessed = true;
-                
                 setTimeout(() => { deadPlayer.spawn(); updateUI(); }, 3000); updateUI();
                 checkGameEnd();
             } else {
@@ -1319,9 +1362,11 @@
                 }
                 
                 if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
-                deadPlayer.hp = 0; deadPlayer.x = -1000; deadPlayer.targetX = -1000; deadPlayer.isDeadProcessed = true;
+                deadPlayer.hp = 0; 
+                deadPlayer.x = -1000; 
+                deadPlayer.targetX = -1000; 
+                deadPlayer.isDeadProcessed = true;
                 
-                // 내가 죽었을 때 즉시 부활 타이머 (네트워크 지연 무시)
                 if (deadPlayer === player) {
                     showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
                     setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
@@ -1331,7 +1376,6 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Game Loop & Render ---
         function checkCollisions() {
             if (player.hp > 0 && !player.isDeadProcessed) {
                 for (let i = orbs.length - 1; i >= 0; i--) {
@@ -1359,22 +1403,9 @@
                         if (Math.hypot(t.x - p.x, t.y - p.y) < t.radius + p.radius) { 
                             let dmg = p.damage; if(t.heroType === 'hexagon' && t.ultActiveTimer > 0) dmg *= 0.8;
                             t.hp -= dmg; p.active = false; 
-                            
-                            // 🚨 궁극기 충전 제약 (시전 중 충전 금지)
-                            if (!p.owner.isBot && !p.owner.isRemote && p.owner.ultActiveTimer <= 0) { 
-                                p.owner.ultGauge = Math.min(100, p.owner.ultGauge + 5); updateUI(); 
-                            }
-
-                            if(t.hp <= 0 && !t.isDeadProcessed) { 
-                                t.isDeadProcessed = true; 
-                                handleDeath(t, p.owner); 
-                                
-                                // 🚨 원형 슈터 제약: 궁극기 1킬 달성 시 바로 멈춤
-                                if (p.owner.heroType === 'circle' && p.owner.ultActiveTimer > 0) {
-                                    p.owner.ultActiveTimer = 0;
-                                    if(p.owner === player) updateUI();
-                                }
-                            }
+                            if (!p.owner.isBot && !p.owner.isRemote && p.owner.ultActiveTimer <= 0) { p.owner.ultGauge = Math.min(100, p.owner.ultGauge + 5); updateUI(); }
+                            if(t.hp <= 0 && !t.isDeadProcessed) { t.isDeadProcessed = true; handleDeath(t, p.owner); }
+                            if (p.owner.heroType === 'circle' && p.owner.ultActiveTimer > 0) { p.owner.ultActiveTimer = 0; if(p.owner === player) updateUI(); }
                         }
                     }
                 }
@@ -1412,8 +1443,11 @@
 
         function gameLoop(timestamp) {
             if (currentState !== GAME_STATE.PLAYING) return;
-            let dt = timestamp - lastTime; lastTime = timestamp;
-            if (dt > 100) dt = 100; // 스로틀링 방지 보호 코드
+            
+            // 🚨 브라우저 백그라운드 전환 시 시간 폭주 방지 캡 적용
+            let dt = timestamp - lastTime; 
+            lastTime = timestamp;
+            if (dt > 100) dt = 100; 
 
             if (!isSinglePlayer && isGameActive) {
                 syncTimer -= dt;
