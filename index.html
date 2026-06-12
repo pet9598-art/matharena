@@ -16,28 +16,15 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
     <style>
-        /* 🚨 모바일 주소창 대응 및 스크롤 완전 차단 */
-        html, body { 
-            position: fixed; 
-            width: 100%; 
-            height: 100%; 
-            margin: 0; 
-            padding: 0; 
-            overflow: hidden; 
-            background-color: #374151; 
-            font-family: 'Jua', sans-serif; 
-            touch-action: none; 
-            overscroll-behavior: none; 
-            user-select: none; 
-            -webkit-user-select: none;
-        }
-        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background-color: #374151; font-family: 'Jua', sans-serif; touch-action: none; user-select: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: none; }
         canvas { display: block; width: 100%; height: 100%; }
 
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; padding: 20px; z-index: 10; }
         #top-bar { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; }
         
-        #scoreboard { background: rgba(0, 0, 0, 0.75); padding: 10px 20px; border-radius: 12px; border: 2px solid #4b5563; color: white; font-size: 20px; display: flex; gap: 20px; pointer-events: auto; }
+        /* 버그 수정: 불필요한 상호작용(pointer-events) 제거로 조이스틱 터치 방해 금지 */
+        #scoreboard { background: rgba(0, 0, 0, 0.75); padding: 10px 20px; border-radius: 12px; border: 2px solid #4b5563; color: white; font-size: 20px; display: flex; gap: 20px; pointer-events: none; }
         .score-team { display: flex; flex-direction: column; align-items: center; }
         .score-blue { color: #60a5fa; }
         .score-red { color: #f87171; }
@@ -49,20 +36,23 @@
         @keyframes fadeOut { 0% { opacity: 1; transform: translateX(20px); } 10% { transform: translateX(0); } 80% { opacity: 1; } 100% { opacity: 0; display: none; } }
 
         /* 점령전 UI */
-        #domination-ui { background: rgba(0, 0, 0, 0.8); padding: 10px 20px; border-radius: 12px; border: 2px solid #fbbf24; color: white; display: none; flex-direction: column; align-items: center; pointer-events: auto;}
+        #domination-ui { background: rgba(0, 0, 0, 0.8); padding: 10px 20px; border-radius: 12px; border: 2px solid #fbbf24; color: white; display: none; flex-direction: column; align-items: center; pointer-events: none;}
         .dom-time { font-size: 20px; margin-top: 5px; }
 
-        #mission-banner { background: rgba(0, 0, 0, 0.8); color: #fbbf24; padding: 10px 30px; border-radius: 9999px; font-size: 24px; text-align: center; border: 2px solid #fbbf24; transition: transform 0.3s ease; pointer-events: auto; margin: 0 10px;}
+        /* 미션 배너 */
+        #mission-banner { background: rgba(0, 0, 0, 0.8); color: #fbbf24; padding: 10px 30px; border-radius: 9999px; font-size: 24px; text-align: center; border: 2px solid #fbbf24; transition: transform 0.3s ease; pointer-events: none; margin: 0 10px;}
         .mission-pop { transform: scale(1.1); }
 
-        #player-stats { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.7); padding: 10px 20px; border-radius: 12px; color: white; display: flex; gap: 20px; align-items: center; pointer-events: auto;}
+        /* 플레이어 체력 바 (조이스틱 터치 방해의 주 원인이었으므로 none 처리) */
+        #player-stats { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.7); padding: 10px 20px; border-radius: 12px; color: white; display: flex; gap: 20px; align-items: center; pointer-events: none;}
         .bar-group { display: flex; flex-direction: column; position: relative; }
         .hp-bar-container, .ult-bar-container { width: 150px; height: 15px; background: #4a5568; border-radius: 8px; overflow: hidden; margin-bottom: 5px; }
         .hp-bar-fill { height: 100%; background: #48bb78; width: 100%; transition: width 0.2s; }
         .ult-bar-fill { height: 100%; background: #ed8936; width: 0%; transition: width 0.2s; }
 
-        #joystick-zone { position: absolute; bottom: 20px; left: 20px; width: 150px; height: 150px; pointer-events: auto; }
-        #skill-zone { position: absolute; bottom: 20px; right: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; }
+        /* 버그 수정: 조이스틱 인식 구역 확대 및 브라우저 제스처 차단 */
+        #joystick-zone { position: absolute; bottom: 20px; left: 20px; width: 180px; height: 180px; pointer-events: auto; touch-action: none; }
+        #skill-zone { position: absolute; bottom: 20px; right: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; touch-action: none; }
         
         .skill-btn { background: rgba(0, 0, 0, 0.6); border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; display: flex; justify-content: center; align-items: center; color: white; font-size: 16px; width: 65px; height: 65px; position: relative; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .skill-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.3); }
@@ -78,16 +68,14 @@
 
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(237, 137, 54, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(237, 137, 54, 0); } 100% { box-shadow: 0 0 0 0 rgba(237, 137, 54, 0); } }
 
-        #quiz-modal-container { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 200; pointer-events: auto; justify-content: center; align-items: center; }
+        #quiz-modal-container { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 200; pointer-events: auto; justify-content: center; align-items: center; }
         #quiz-box { background: #1f2937; border: 4px solid #fbbf24; border-radius: 16px; padding: 30px; width: 90%; max-width: 500px; text-align: center; color: white; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
         .quiz-option { background: #3b82f6; border: 2px solid #2563eb; color: white; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 20px; cursor: pointer; transition: background 0.2s; }
         .quiz-option:hover { background: #2563eb; }
 
-        /* 시작 카운트다운 */
-        #countdown-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 250; color: #fbbf24; font-size: 120px; font-weight: bold; justify-content: center; align-items: center; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        #countdown-overlay { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 250; color: #fbbf24; font-size: 120px; font-weight: bold; justify-content: center; align-items: center; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
 
-        /* Menus */
-        .fullscreen-menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; }
+        .fullscreen-menu { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 300; }
         .hidden-menu { display: none !important; }
         
         .mode-selection { display: flex; gap: 30px; margin-bottom: 20px; background: rgba(0,0,0,0.3); padding: 15px 30px; border-radius: 12px;}
@@ -122,9 +110,10 @@
         .status-ready { color: #48bb78; font-weight: bold; }
         .status-wait { color: #a0aec0; }
 
+        /* 기기별 화면 최적화 (모바일 지원) */
         @media (max-width: 768px) {
             #skill-zone { transform: scale(0.8); transform-origin: bottom right; bottom: 10px; right: 10px; gap: 10px; }
-            #joystick-zone { transform: scale(0.8); transform-origin: bottom left; bottom: 10px; left: 10px; }
+            #joystick-zone { transform: scale(0.85); transform-origin: bottom left; bottom: 10px; left: 10px; }
             #player-stats { transform: scale(0.8) translateX(-50%); transform-origin: bottom left; left: 50%; bottom: 10px; }
             #scoreboard { font-size: 16px; padding: 5px 10px; gap: 10px; }
             .score-numbers { font-size: 20px; }
@@ -207,7 +196,6 @@
         <p id="start-warning" class="text-red-400 mt-2 font-bold h-6"></p>
     </div>
 
-    <!-- UI Overlays -->
     <div id="modal">메시지</div>
     <div id="announcement">📦 보급이 곧 투하됩니다!</div>
     <div id="countdown-overlay">3</div>
@@ -288,25 +276,8 @@
         const missionBanner = document.getElementById('mission-banner');
 
         let viewWidth, viewHeight;
-        
-        // 🚨 주소창 대응 모바일 뷰포트 최적화 함수
-        function resize() { 
-            viewWidth = window.innerWidth; 
-            viewHeight = window.innerHeight; 
-            canvas.width = viewWidth; 
-            canvas.height = viewHeight; 
-            
-            // 모바일 주소창 높이에 맞게 강제로 컨테이너 크기 할당 (화면 잘림 및 조이스틱 숨김 방지)
-            document.body.style.height = viewHeight + 'px';
-            const gc = document.getElementById('game-container');
-            if(gc) gc.style.height = viewHeight + 'px';
-            document.querySelectorAll('.fullscreen-menu').forEach(el => {
-                el.style.height = viewHeight + 'px';
-            });
-        }
-        window.addEventListener('resize', resize);
-        window.addEventListener('orientationchange', () => setTimeout(resize, 100)); // 화면 회전 대응
-        resize();
+        function resize() { viewWidth = window.innerWidth; viewHeight = window.innerHeight; canvas.width = viewWidth; canvas.height = viewHeight; }
+        window.addEventListener('resize', resize); resize();
 
         const GAME_STATE = { MENU: 0, PLAYING: 1, GAME_OVER: 2 };
         let currentState = GAME_STATE.MENU;
@@ -438,35 +409,30 @@
                         let pData = playersData[uid]; let p = remotePlayers[uid];
                         
                         if(p) { 
-                            // 🚨 사망 및 부활 시 투명화 버그 완전 해결 부분
-                            // HP 정보를 가장 먼저 읽어들여 죽음 상태(isDeadProcessed)를 결정합니다.
+                            let justRespawned = p.isDeadProcessed && (pData.hp > 0);
+                            
                             if (pData.hp !== undefined) {
                                 p.hp = pData.hp;
-                                if (p.hp > 0 && p.isDeadProcessed) {
-                                    // 사망 처리되어있던 플레이어의 HP가 찼다 => 부활 감지
-                                    p.isDeadProcessed = false;
-                                    // 부활 즉시 걸어오지 않고 텔레포트 하도록 x, y 강제 할당
-                                    p.x = pData.x !== undefined ? pData.x : p.x;
-                                    p.y = pData.y !== undefined ? pData.y : p.y;
-                                } else if (p.hp <= 0) {
-                                    p.isDeadProcessed = true;
-                                    p.x = -1000;
-                                    p.y = -1000;
-                                }
+                                p.isDeadProcessed = (p.hp <= 0); 
                             }
 
-                            // 플레이어가 살아있다고 판정될 때만 좌표 및 상태 동기화 진행
                             if (!p.isDeadProcessed) {
                                 if (pData.x !== undefined) p.targetX = pData.x;
                                 if (pData.y !== undefined) p.targetY = pData.y;
                                 if (pData.facingAngle !== undefined) p.facingAngle = pData.facingAngle;
-                                if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
-                                if (pData.buff !== undefined) p.buffStacks = pData.buff;
-                                if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
+                                
+                                if (justRespawned) {
+                                    p.x = p.targetX;
+                                    p.y = p.targetY;
+                                }
                             } else {
                                 p.targetX = -1000;
-                                p.targetY = -1000;
+                                p.x = -1000;
                             }
+
+                            if (pData.ult !== undefined) p.ultActiveTimer = pData.ult;
+                            if (pData.buff !== undefined) p.buffStacks = pData.buff;
+                            if (pData.inv !== undefined) p.invincibleTimer = pData.inv;
                         }
                     }
                 }
@@ -599,7 +565,6 @@
             
             if (animationFrameId) cancelAnimationFrame(animationFrameId); 
             animationFrameId = requestAnimationFrame(gameLoop);
-            resize(); // 게임 컨테이너 보일 때 강제 리사이즈 한 번 더
         }
 
         function startCountdown(callback) {
@@ -636,7 +601,6 @@
                 document.getElementById('score-red-kill').innerText = stats.red.kills; document.getElementById('score-red-death').innerText = stats.red.deaths;
 
                 if (data.victimUid === myUid) {
-                    // 클라이언트에서 킬 처리 완료 안됐을 경우 강제 처리
                     if(!player.isDeadProcessed) { 
                         showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
                         player.hp = 0; player.x = -1000; player.targetX = -1000; player.isDeadProcessed = true;
@@ -1225,8 +1189,15 @@
                 }
             });
 
+            // 조이스틱을 보다 안정적으로 인식할 수 있게끔 세팅 변경 (크기 확대 및 static 유지)
             const zone = document.getElementById('joystick-zone'); if (joystickManager) joystickManager.destroy();
-            joystickManager = nipplejs.create({ zone: zone, mode: 'static', position: { left: '50%', top: '50%' }, color: 'white', size: 120 });
+            joystickManager = nipplejs.create({ 
+                zone: zone, 
+                mode: 'static', 
+                position: { left: '90px', bottom: '90px' }, // 조이스틱 구역(180x180)의 한가운데
+                color: 'white', 
+                size: 120 
+            });
             joystickManager.on('move', (evt, data) => { if (data && data.vector && player.hp > 0 && !player.isDeadProcessed && isGameActive) { isJoystickActive = true; player.vx = data.vector.x; player.vy = -data.vector.y; } });
             joystickManager.on('end', () => { isJoystickActive = false; if(player) {player.vx = 0; player.vy = 0;} });
         }
@@ -1360,13 +1331,7 @@
                         victimUid: deadPlayer === player ? myUid : deadPlayer.name
                     });
                 }
-                
-                if(deadPlayer.realm) { deadPlayer.realm.active = false; deadPlayer.realm = null; }
-                deadPlayer.hp = 0; 
-                deadPlayer.x = -1000; 
-                deadPlayer.targetX = -1000; 
-                deadPlayer.isDeadProcessed = true;
-                
+                deadPlayer.hp = 0; deadPlayer.isDeadProcessed = true; 
                 if (deadPlayer === player) {
                     showModal("사망! 3초 후 리스폰됩니다."); closeQuiz();
                     setTimeout(() => { player.spawn(); updateUI(); }, 3000); updateUI();
@@ -1444,7 +1409,6 @@
         function gameLoop(timestamp) {
             if (currentState !== GAME_STATE.PLAYING) return;
             
-            // 🚨 브라우저 백그라운드 전환 시 시간 폭주 방지 캡 적용
             let dt = timestamp - lastTime; 
             lastTime = timestamp;
             if (dt > 100) dt = 100; 
